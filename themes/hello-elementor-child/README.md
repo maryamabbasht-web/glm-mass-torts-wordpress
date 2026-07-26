@@ -27,15 +27,42 @@ inc/
   post-types.php       tort · location · result
   taxonomies.php       tort_category · tort_status + seeded terms
   tort-grid.php        [glm_tort_grid] and two helper shortcodes
+  importer.php         Tools → Import Torts (admin only)
   parts/
     tort-card.php      The "loop item" — the card, designed once
 acf-json/              Field groups as version-controlled files
+data/
+  torts.json           40 torts extracted from the source HTML
 assets/
   css/components.css   Component styles, tokens only
   js/tort-tabs.js      Tab behaviour, progressive enhancement
 single-tort.php        ONE file → 40 tort pages
 archive-tort.php       /mass-torts/ and /mass-torts/type/{slug}/
 ```
+
+---
+
+## Importing the 40 torts
+
+**Tools → Import Torts.** Seeds the CPT from `data/torts.json`, which was extracted from `source/glmasstorts.html` rather than transcribed — 40 torts × 8 fields is 320 values, and hand-entry is precisely the grind that introduces drift (**R14**).
+
+The page defaults to a **dry run**. Untick it to write.
+
+**Safe to re-run.** Torts are matched on a `_glm_import_key` meta value derived from the title, so a second run updates rather than duplicates.
+
+> **Gotcha:** re-running **overwrites** manual edits to title, content, excerpt, and all ACF fields. Once real content has been written on top of the seed, edit `data/torts.json` instead of the admin — or stop re-running the importer.
+
+### What the extraction found
+
+| | |
+|---|---|
+| Unique torts | 40 — matching the source's own category counts exactly |
+| Duplicate panels skipped | 3 (`tab-product`, `tab-abuse`, `tab-tech`) |
+| Featured | 5 |
+| Statuses | 28 active · 6 emerging · 5 settling · 1 appellate |
+| Field completeness | 40/40 on title, description, status, MDL, settlement |
+
+The source claimed "35+". There are 40.
 
 ---
 

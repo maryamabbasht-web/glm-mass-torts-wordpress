@@ -77,6 +77,10 @@ require_once GLM_DIR . '/inc/post-types.php';
 require_once GLM_DIR . '/inc/taxonomies.php';
 require_once GLM_DIR . '/inc/tort-grid.php';
 
+if ( is_admin() ) {
+	require_once GLM_DIR . '/inc/importer.php';
+}
+
 /**
  * Flush rewrite rules once after activation.
  *

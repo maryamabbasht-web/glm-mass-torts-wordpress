@@ -6,6 +6,40 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-26 — Tort content extracted and importer built
+
+**Type:** `feat` · **Branch:** `feat/tort-importer`
+
+### What changed
+
+- Added `themes/hello-elementor-child/data/torts.json` — all 40 torts, extracted programmatically from the source HTML
+- Added `inc/importer.php` — a **Tools → Import Torts** admin page, idempotent, defaulting to dry run
+- Wired the importer into `functions.php`, admin-only
+
+### Why
+
+40 torts × 8 fields is **320 values**. Hand-entering them is exactly the grind that introduces the drift this project exists to prevent (**R14** — the correct path must be the easy one). Extracting programmatically also makes the seed content version-controlled and reviewable, so a mistake is a diff rather than an archaeology exercise.
+
+### How the extraction went
+
+Written as a throwaway PHP script using `DOMDocument`/`DOMXPath`, run against `source/glmasstorts.html`. It deduplicates the three tab panels that appear twice in the source, and skips the "coming soon" placeholder cards.
+
+Result: **40 unique torts**, matching the source's own per-category counts exactly (10 pharma, 11 device, 6 toxic, 4 product, 5 abuse, 4 tech). Field completeness is 40/40 on title, description, status label, MDL reference, and settlement estimate.
+
+**One bug worth recording.** The first run set every status to `badge`. The source markup is `class="status-badge status-settling"`, and a naive first-match regex on `status-` returns `badge`. Fixed by collecting all matches and dropping known non-values. Caught only because the output was checked against expectations rather than assumed correct — a reminder that a scraper that runs without error is not the same as a scraper that is right.
+
+### Importer design
+
+Idempotent by a `_glm_import_key` post meta derived from the title, so re-running updates rather than duplicates. Uses `update_field()` when ACF is present so the field-key references are written correctly, and falls back to raw post meta when it is not.
+
+> **Known trade-off:** a re-run overwrites manual edits. Acceptable while the content is still seed data; once real copy is written on top, the JSON becomes the place to edit, or the importer stops being used.
+
+### Verification
+
+All 8 PHP files pass `php -l` on 8.3.32. Seed file parses, 40 records, 30.9 KB. **Not yet run against WordPress.**
+
+---
+
 ## 2026-07-26 — Phase 2/3 (partial): child theme scaffold
 
 **Type:** `feat` · **Branch:** `feat/child-theme-scaffold` · **Tag:** `phase-2-theme-scaffold`

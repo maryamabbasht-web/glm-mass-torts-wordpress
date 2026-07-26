@@ -171,7 +171,7 @@ git log --grep="^Why:" --format='%h %s%n%b'
 
 1. **Provide the WordPress Studio site path** — the folder containing `wp-content`. Needed to create the junction.
 2. **Activate and debug** — install Hello Elementor and ACF free, activate the child theme, work through first-run issues.
-3. **Import the 40 torts** from `source/glmasstorts.html` into the CPT.
+3. **Import the 40 torts** — already extracted to `themes/hello-elementor-child/data/torts.json`. Run **Tools → Import Torts** in the admin. It defaults to a dry run and is safe to re-run.
 
 ### Connecting the repo to Studio
 
