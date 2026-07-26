@@ -80,6 +80,21 @@ require_once GLM_DIR . '/inc/socials.php';
 require_once GLM_DIR . '/inc/content-blocks.php';
 require_once GLM_DIR . '/inc/elementor-kit.php';
 require_once GLM_DIR . '/inc/elementor-sections.php';
+require_once GLM_DIR . '/inc/pages.php';
+require_once GLM_DIR . '/inc/elementor-header-footer.php';
+
+/**
+ * Declare support for Header Footer Elementor.
+ *
+ * HFE only auto-detects a short list of themes, and a child theme is not
+ * on it — current_theme_supports() returned false even though the parent
+ * (Hello Elementor) is supported. Without this, HFE renders its settings
+ * screen but never outputs the header or footer on the front end.
+ */
+function glm_declare_hfe_support() {
+	add_theme_support( 'header-footer-elementor' );
+}
+add_action( 'after_setup_theme', 'glm_declare_hfe_support' );
 
 // Admin UI, plus WP-CLI so the import is scriptable and repeatable.
 if ( is_admin() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
