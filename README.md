@@ -6,8 +6,8 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 
 ## Status
 
-**Current phase:** Site running locally with all 40 torts imported and verified
-**Next phase:** Phase 4 — component library (Saved Templates) and the homepage
+**Current phase:** Homepage live locally, assembled from five section templates
+**Next phase:** Phase 5 — header, footer, and the remaining pages
 
 | Phase | Description | Status |
 |---|---|---|
@@ -15,10 +15,23 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 | 1 | Component inventory from source HTML | ✅ Complete |
 | 2 | Child theme + design tokens | ✅ Complete |
 | 3 | Custom post types + ACF fields + content import | ✅ Complete |
-| 4 | Component library (Saved Templates) | ⬜ Not started |
-| 5 | Header, footer, page assembly | ⬜ Not started |
+| 4 | Component library + homepage | ✅ Complete |
+| 5 | Header, footer, remaining pages | ⬜ Not started |
 | 6 | Editor guide, exports, handoff | ⬜ Not started |
 | — | *Deferred:* migration to live, redirects, SEO | ⬜ Not started |
+
+### The homepage is six lines
+
+```
+[glm_section slug="hero"]
+[glm_section slug="stats"]
+[glm_section slug="about"]
+[glm_section slug="divisions"]
+[glm_tort_grid tabs="no" featured="yes" heading="no"]
+[glm_section slug="contact"]
+```
+
+That is **R10** working — the page reads like a table of contents. Nothing is copy-pasted; editing a section template updates every page that uses it (**R4**).
 
 ### Live locally
 

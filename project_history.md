@@ -6,6 +6,62 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-27 — Phase 4 complete: all five sections built, homepage assembled
+
+**Type:** `feat` · **Branch:** `feat/remaining-sections`
+
+### What changed
+
+- Added `inc/content-blocks.php` — importers and renderers for the `result` and `location` post types
+- Added `data/results.json` (4 records) and `data/locations.json` (8 records)
+- Added `[glm_results]` and `[glm_locations]` shortcodes
+- Added WP-CLI `glm import-content`
+- Generated four more sections: **Stats Bar, About, Divisions, Contact**
+- Added ~450 lines of component CSS, all token-based
+- Assembled the homepage and set it as the front page
+
+### The homepage is six lines
+
+```
+[glm_section slug="hero"]
+[glm_section slug="stats"]
+[glm_section slug="about"]
+[glm_section slug="divisions"]
+[glm_tort_grid tabs="no" featured="yes" heading="no"]
+[glm_section slug="contact"]
+```
+
+That is R10 working as intended — the page reads as a table of contents. Nothing is pasted; every section resolves through R4's shortcode, so editing a template updates every page using it.
+
+### R5 demonstrated twice on one page
+
+The stats bar renders **40+** and the About highlight renders **40+ Active Mass Torts** — both from `[glm_tort_count]`, both computed from the same query.
+
+The source hardcoded "35+" in both places, and was wrong in both. Those two numbers can no longer disagree with each other or with reality.
+
+### Verification — DOM-parsed, not grepped
+
+| Check | Result |
+|---|---|
+| Sections rendering | 6 / 6 |
+| Unresolved shortcodes | **0** |
+| Stats bar | 40+ · 198K+ · All 50 · $0 · 24/7 |
+| About highlights | 4, including the dynamic count |
+| Results from CPT | 4 / 4 correct |
+| Divisions | 3 / 3 |
+| Legacy Section/Column (**R2**) | **0** |
+| Flex containers | 63 |
+| Staging hotlinks | **0** |
+| Heading hierarchy (**R11**) | exactly one `<h1>`, then `<h2>`/`<h3>` in order |
+
+> A note on the verification itself: the first pass used regex against the HTML and returned nonsense — greedy matches spanning 63 containers reported the About copy as a stat number. Switching to `DOMDocument`/`DOMXPath` gave real answers. Regex over nested HTML produces confident garbage, which is the same failure mode as the earlier false negatives, just wearing different clothes.
+
+### R12 status
+
+All five sections and the kit are **generated from version-controlled PHP**. Nothing here needs exporting — `wp glm build-sections` and `wp glm apply-kit` rebuild the lot from git. The `exports/` ritual applies only to work done by hand in the Elementor UI.
+
+---
+
 ## 2026-07-27 — Phase 4b: hero section generated; R4's mechanism corrected
 
 **Type:** `feat` / `fix` · **Branch:** `feat/hero-section`

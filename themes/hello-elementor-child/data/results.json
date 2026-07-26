@@ -1,0 +1,26 @@
+[
+  {
+    "title": "Roundup / Glyphosate MDL",
+    "amount": "$11B+",
+    "result_description": "Total settlements secured industry-wide for cancer victims",
+    "menu_order": 1
+  },
+  {
+    "title": "Philips CPAP Recall",
+    "amount": "$1.1B",
+    "result_description": "Settlement secured for device injury victims",
+    "menu_order": 2
+  },
+  {
+    "title": "Camp Lejeune Water Contamination",
+    "amount": "$530M+",
+    "result_description": "Paid to date with 409,000+ claims still pending",
+    "menu_order": 3
+  },
+  {
+    "title": "Active MDL Pendants Nationwide",
+    "amount": "198K+",
+    "result_description": "Across 158 active multidistrict litigations as of Q1 2026",
+    "menu_order": 4
+  }
+]
