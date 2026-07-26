@@ -131,13 +131,33 @@ Every visual unit is its own widget with its own fields.
 Use **Icon Box** / **Image Box** for card-like units, **Icon List** for lists, and the **Accordion** / **Tabs** widgets rather than hand-built equivalents.
 
 #### R4 — Build once, use everywhere — via shortcode, never copy-paste
-Any section appearing on two or more pages becomes a **Saved Template**, inserted with `[elementor-template id="123"]`. Editing the template updates every instance.
+Any section appearing on two or more pages becomes a **Saved Template**, inserted with:
+
+```
+[glm_section slug="hero"]
+```
+
+Editing the template updates every instance.
 
 **Banned:** copy-pasting a section between pages. It creates an independent copy that silently drifts out of sync.
 
-> **Gotcha:** shortcode-inserted templates render as a placeholder in the editor canvas, not live content. That is the price of sync — preview the page to check.
+> ### ⚠️ Correction (2026-07-27) — the original mechanism does not exist
 >
-> **Gotcha:** Elementor Free has no Template *widget* (that is Pro). Use the **Shortcode** widget.
+> This rule originally specified `[elementor-template id="123"]`, which is how Elementor 3.x worked. **That shortcode is not registered in Elementor Free 4.2.0.** Verified on the live site: the literal text renders on the page, and because `wptexturize` only skips *registered* shortcodes, WordPress first curls the quotes into `id=&#8221;50&#8243;`.
+>
+> Elementor 4.x registers `elementor-element` instead. We use neither — `inc/elementor-sections.php` provides `[glm_section slug="..."]`, built on Elementor's `get_builder_content_for_display()`.
+>
+> **The replacement is better than what it replaced:**
+> - **Addressed by slug, not ID.** Delete and rebuild a template and every page still resolves. A hardcoded ID breaks everywhere.
+> - **Registered**, so `wptexturize` leaves the attribute quotes alone.
+> - **Lives in git.**
+> - **Fails visibly** for logged-in editors instead of rendering nothing.
+>
+> *The lesson:* the rule was right, the mechanism was assumed. Rules should name the outcome; mechanisms need verifying against the installed version.
+
+> **Gotcha:** widgets take `_css_classes`, containers take `css_classes` — **no leading underscore**. Get it wrong and the element still renders, just without your class, so styling silently never applies and nothing errors.
+>
+> **Gotcha:** after changing a template, Elementor keeps serving cached output. `files_manager->clear_cache()` is required or your change appears not to have worked. `glm build-sections` does this automatically.
 
 #### R5 — Repeating data lives in the database, not in the page
 Practice areas, case types, attorneys, testimonials, FAQs and results become **custom post types + ACF free fields**, displayed with a free post-grid widget.

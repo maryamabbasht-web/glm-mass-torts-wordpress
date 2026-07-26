@@ -503,6 +503,125 @@
 }
 
 
+/* ── Buttons ─────────────────────────────────────────────── */
+/* Shared by the hero and every later section. Elementor's button
+   widget wrapper is .elementor-button, so these override it. */
+
+.glm-btn .elementor-button,
+a.glm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 1rem 2.25rem;
+  border: none;
+  border-radius: var(--glm-radius);
+  font-family: var(--glm-font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: filter 0.2s, transform 0.15s, background 0.2s, border-color 0.2s;
+}
+
+.glm-btn--cta .elementor-button {
+  background: var(--glm-cta);
+  color: var(--glm-white);
+}
+
+.glm-btn--cta .elementor-button:hover,
+.glm-btn--cta .elementor-button:focus-visible {
+  background: var(--glm-cta);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.glm-btn--outline .elementor-button {
+  background: transparent;
+  color: var(--glm-white);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-weight: 500;
+  text-transform: none;
+}
+
+.glm-btn--outline .elementor-button:hover,
+.glm-btn--outline .elementor-button:focus-visible {
+  border-color: var(--glm-accent);
+  background: rgba(80, 108, 251, 0.1);
+}
+
+
+/* ── Hero ────────────────────────────────────────────────── */
+
+.glm-hero {
+  position: relative;
+  padding: 6.25rem var(--glm-section-x) 3.125rem;
+  background: var(--glm-primary);
+  overflow: hidden;
+}
+
+/* The gold-to-accent rule across the top of the original hero. */
+.glm-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--glm-accent) 0%,
+    var(--glm-accent-light) 50%,
+    var(--glm-accent) 100%
+  );
+}
+
+.glm-hero__content {
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0;
+}
+
+.glm-hero .glm-eyebrow {
+  color: var(--glm-accent);
+}
+
+.glm-hero__title,
+.glm-hero__title .elementor-heading-title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h1);
+  font-weight: 700;
+  line-height: 1.07;
+  color: var(--glm-white);
+  margin: 0 0 1.5rem;
+}
+
+.glm-hero__title em {
+  font-style: italic;
+  color: var(--glm-accent-light);
+}
+
+.glm-hero__lead {
+  max-width: 560px;
+  margin-bottom: 2.5rem;
+  font-size: var(--glm-text-lg);
+  font-weight: 300;
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.glm-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  .glm-hero {
+    padding: 3.75rem var(--glm-section-x) 2.5rem;
+  }
+}
+
+
 /* ── Social links ────────────────────────────────────────── */
 
 .glm-socials {
