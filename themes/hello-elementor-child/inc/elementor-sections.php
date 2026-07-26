@@ -468,14 +468,34 @@ function glm_section_definitions() {
 }
 
 /**
+ * Hash a template's stored Elementor tree.
+ *
+ * Both the fingerprint and the later comparison must read through this one
+ * function, or they will disagree about slashes and the guard misfires.
+ *
+ * @param int $post_id Template post ID.
+ * @return string
+ */
+function glm_elementor_data_hash( $post_id ) {
+	$raw = get_post_meta( $post_id, '_elementor_data', true );
+
+	if ( ! is_string( $raw ) ) {
+		$raw = wp_json_encode( $raw );
+	}
+
+	return $raw ? md5( $raw ) : '';
+}
+
+/**
  * Create or update a Saved Template.
  *
- * @param string $slug  Section slug.
- * @param array  $def   Definition.
- * @param bool   $force Overwrite if it already exists.
+ * @param string $slug                   Section slug.
+ * @param array  $def                    Definition.
+ * @param bool   $force                  Overwrite if it already exists.
+ * @param bool   $allow_overwrite_edited Also overwrite templates edited in Elementor.
  * @return array [status, post_id]
  */
-function glm_build_section( $slug, array $def, $force = false ) {
+function glm_build_section( $slug, array $def, $force = false, $allow_overwrite_edited = false ) {
 
 	$existing = get_posts(
 		array(
@@ -495,6 +515,25 @@ function glm_build_section( $slug, array $def, $force = false ) {
 	}
 
 	$data = call_user_func( $def['callback'] );
+
+	/*
+	 * PROTECT HAND EDITS.
+	 *
+	 * A hash of the generated tree is stored at build time. If the stored
+	 * data no longer matches that hash, someone has edited the template in
+	 * Elementor — and --force would throw that work away silently.
+	 *
+	 * Refusing here rather than documenting the risk is the point of R14:
+	 * the safe path should not depend on remembering anything.
+	 */
+	if ( $post_id && $force && ! $allow_overwrite_edited ) {
+		$stored_hash  = get_post_meta( $post_id, '_glm_generated_hash', true );
+		$current_hash = glm_elementor_data_hash( $post_id );
+
+		if ( $stored_hash && $current_hash && $stored_hash !== $current_hash ) {
+			return array( 'SKIPPED (edited in Elementor)', $post_id );
+		}
+	}
 
 	$postarr = array(
 		'post_type'   => 'elementor_library',
@@ -517,6 +556,18 @@ function glm_build_section( $slug, array $def, $force = false ) {
 
 	// Elementor stores its tree as JSON with slashes already escaped.
 	update_metadata( 'post', $post_id, '_elementor_data', wp_slash( wp_json_encode( $data ) ) );
+
+	/*
+	 * Fingerprint AFTER writing, by reading back through the exact same
+	 * path the comparison will later use.
+	 *
+	 * Hashing the string we passed in does NOT work: update_metadata()
+	 * calls wp_unslash() internally, so what lands in the database is not
+	 * what we handed it. Hashing the input made every template look edited
+	 * on the next run — a guard that fires constantly is worse than none,
+	 * because people learn to pass --force reflexively.
+	 */
+	update_post_meta( $post_id, '_glm_generated_hash', glm_elementor_data_hash( $post_id ) );
 	update_post_meta( $post_id, '_elementor_edit_mode', 'builder' );
 	update_post_meta( $post_id, '_elementor_template_type', 'section' );
 	update_post_meta( $post_id, '_elementor_version', defined( 'ELEMENTOR_VERSION' ) ? ELEMENTOR_VERSION : '' );
@@ -636,11 +687,28 @@ function glm_cli_build_sections( $args, $assoc_args ) {
 		WP_CLI::error( 'Elementor is not active.' );
 	}
 
-	$force = isset( $assoc_args['force'] );
+	$force          = isset( $assoc_args['force'] );
+	$allow_clobber  = isset( $assoc_args['overwrite-edited'] );
+	$protected      = 0;
 
 	foreach ( glm_section_definitions() as $slug => $def ) {
-		list( $status, $id ) = glm_build_section( $slug, $def, $force );
-		WP_CLI::log( sprintf( '  %-10s %-18s id=%-4d  [glm_section slug="%s"]', $slug, $status, $id, $slug ) );
+		list( $status, $id ) = glm_build_section( $slug, $def, $force, $allow_clobber );
+
+		if ( false !== strpos( $status, 'edited' ) ) {
+			$protected++;
+		}
+
+		WP_CLI::log( sprintf( '  %-10s %-30s id=%-4d  [glm_section slug="%s"]', $slug, $status, $id, $slug ) );
+	}
+
+	if ( $protected ) {
+		WP_CLI::warning(
+			sprintf(
+				'%d template(s) were edited in Elementor and left untouched. '
+				. 'Pass --overwrite-edited to discard those edits.',
+				$protected
+			)
+		);
 	}
 
 	WP_CLI::success( 'Sections built. Insert with the shortcode above (R4 — never copy-paste).' );
