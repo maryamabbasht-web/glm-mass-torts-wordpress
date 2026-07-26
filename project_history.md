@@ -6,6 +6,53 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-27 — Phase 4a: brand assets imported, Elementor kit generated from theme tokens
+
+**Type:** `feat` · **Branch:** `feat/elementor-kit`
+
+### What changed
+
+- Imported `GL Logo.png` (319×49) and `fav-icon.png` (512×512) into the Media Library
+- Set the WordPress site icon and regenerated its proper sizes
+- Added `inc/elementor-kit.php` — Elementor's Global Colors, Fonts and breakpoints **generated from theme-defined tokens**
+- Added WP-CLI command `glm apply-kit`
+
+### The structural decision
+
+Elementor's kit lives in `postmeta`, so git captures none of it (**R12**). The usual answer is "click it into the UI, then remember to export."
+
+Instead the theme is now the **source of truth** and the kit is a **generated artifact**. Tokens are defined once in a version-controlled PHP file and pushed into Elementor by command.
+
+> This solves R12 for the kit **outright** rather than mitigating it. There is nothing to export, because the file regenerates it. A JSON export would be a snapshot of a derived thing; the file is the thing itself.
+>
+> Saved Templates in Phase 4b are not covered by this and will still need exporting.
+
+Applied: 4 system colours, 5 custom colours, 4 system typography presets, 3 custom presets, breakpoints, site logo.
+
+### The breakpoint bug — R8 caught in the act
+
+Saving `viewport_tablet = 900` stored correctly. The generated CSS still emitted `@media(max-width:1024px)`.
+
+The setting was right and the output was wrong, because Elementor's compiled CSS keeps the old breakpoint until its file cache is cleared, and the breakpoints manager caches its config for the request. Fixed by refreshing the manager, then clearing the file cache, then regenerating. Verified: CSS now emits 900 and 767.
+
+> Third time this pattern has appeared. The status scraper, the taxonomy template, and now this — each reported success while being wrong. Reading back the *artifact* rather than the *return value* is what caught all three.
+
+This matters because the source breaks at 900px and Elementor defaults to 1024. Left alone, the whole 900–1024 band renders with tablet styles the design never intended.
+
+### A deliberate duplicate
+
+`Surface Deep` carries the same hex as `Text` (`#0B1929`). One value, two roles — body copy and dark section backgrounds. De-duplicating would leave an editor picking a background from a swatch labelled "Text". A clear role name beats a clever de-duplication (**R14**).
+
+### Logo resolution — flagged, not blocking
+
+`GL Logo.png` is 319×49. On a 2× retina display that is only crisp up to ~159px wide, and most law-firm header logos sit at 180–220px. It will look soft. An SVG or a ~700px-wide PNG would fix it permanently. Proceeding meanwhile.
+
+### Verification
+
+Kit settings read back correctly. Generated CSS emits all 9 colour custom properties and both breakpoints at the intended widths. Favicon markup now declares accurate sizes: 32×32 for `icon`, 180×180 for `apple-touch-icon`, 192×192 for Android.
+
+---
+
 ## 2026-07-26 — Social icons de-hotlinked; brand asset home created
 
 **Type:** `feat` · **Branch:** `feat/socials-and-brand`
