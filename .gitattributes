@@ -1,0 +1,55 @@
+# =============================================================
+#  Line-ending normalisation
+#
+#  Without this, files committed from Windows carry CRLF and
+#  show as entirely rewritten when touched on Linux (or on a
+#  Linux-based host). Normalising in the repo keeps diffs
+#  meaningful and avoids PHP files breaking on deploy.
+# =============================================================
+
+# Default: normalise to LF in the repo, native in the working copy
+* text=auto eol=lf
+
+# ── Explicitly text ──────────────────────────────────────────
+*.php    text eol=lf
+*.css    text eol=lf
+*.scss   text eol=lf
+*.js     text eol=lf
+*.json   text eol=lf
+*.html   text eol=lf
+*.md     text eol=lf
+*.txt    text eol=lf
+*.xml    text eol=lf
+*.yml    text eol=lf
+*.yaml   text eol=lf
+.htaccess text eol=lf
+
+# ── Windows-only files keep CRLF ─────────────────────────────
+*.bat    text eol=crlf
+*.cmd    text eol=crlf
+
+# ── Binary: never touch, never diff ──────────────────────────
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.webp   binary
+*.avif   binary
+*.ico    binary
+*.svgz   binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.eot    binary
+*.otf    binary
+*.pdf    binary
+*.zip    binary
+*.gz     binary
+*.mp4    binary
+*.mov    binary
+*.xlsx   binary
+*.docx   binary
+
+# ── Elementor exports: JSON, but machine-generated ───────────
+# Marked as diffable text so template changes stay reviewable.
+exports/**/*.json text eol=lf

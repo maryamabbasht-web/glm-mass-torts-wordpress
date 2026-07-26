@@ -41,6 +41,7 @@ backup*/
 # ── Themes: track ONLY our child theme ───────────────────────
 # Parent theme (Hello Elementor) is installed via WP, not versioned.
 themes/*
+!themes/README.md
 !themes/hello-elementor-child/
 
 # ── Database dumps ───────────────────────────────────────────
