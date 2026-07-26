@@ -503,6 +503,61 @@
 }
 
 
+/* ── Social links ────────────────────────────────────────── */
+
+.glm-socials {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.glm-socials__item {
+  margin: 0;
+}
+
+.glm-socials__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.0625rem;
+  line-height: 1;
+  color: var(--glm-white);
+  text-decoration: none;
+  border-radius: 50%;
+  transition: color 0.2s, background 0.2s;
+}
+
+.glm-socials__link:hover,
+.glm-socials__link:focus-visible {
+  color: var(--glm-accent-light);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.glm-socials__link svg {
+  display: block;
+}
+
+/* Screen-reader-only text. Hello Elementor does not always define this,
+   so it is declared here rather than assumed. */
+.glm-socials .screen-reader-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+
 /* ── Accessibility ───────────────────────────────────────── */
 
 .glm-tort-card:focus-visible,
