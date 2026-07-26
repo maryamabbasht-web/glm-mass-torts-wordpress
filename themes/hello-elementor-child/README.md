@@ -42,6 +42,34 @@ archive-tort.php       /mass-torts/ and /mass-torts/type/{slug}/
 
 ---
 
+## Elementor design tokens are generated, not clicked
+
+```bash
+studio wp glm apply-kit
+```
+
+Elementor's Global Colors and Fonts live in `postmeta` on the kit post, so git captures none of them (**R12**). Hand-clicking them into the UI means the design system exists only in a database.
+
+So `inc/elementor-kit.php` is the **source of truth**, and Elementor's kit is a **generated artifact**. Tokens are defined once, in git, and pushed into Elementor by command.
+
+> **This solves R12 for the kit outright** — there is nothing to export, because the file regenerates it. Saved Templates in Phase 4 still need exporting.
+
+Applied: 9 colours, 7 typography presets, breakpoints, site logo.
+
+> **Gotcha:** re-running overwrites anything edited in Elementor's UI. That is the intended direction — the file wins, not the database.
+>
+> **Gotcha (found the hard way):** saving `viewport_tablet` stores the value but Elementor's compiled CSS keeps the **old** breakpoint. After the first run the kit reported `tablet=900` while the CSS still emitted `@media(max-width:1024px)`. Fixed by refreshing the breakpoints manager and clearing the file cache before regenerating. Verified: the CSS now emits 900 and 767.
+
+### Why the breakpoint matters
+
+The source breaks at **900px**; Elementor defaults to **1024px**. Left alone, everything in the 900–1024 band renders with tablet styles the design never intended (**R8**).
+
+### Duplicate colour, on purpose
+
+`Surface Deep` is the same hex as `Text` (`#0B1929`). One value, two roles — body copy and dark section backgrounds. De-duplicating would leave an editor picking a background from a swatch labelled "Text". A clear role name beats a clever de-duplication (**R14**).
+
+---
+
 ## Importing the 40 torts
 
 **Tools → Import Torts.** Seeds the CPT from `data/torts.json`, which was extracted from `source/glmasstorts.html` rather than transcribed — 40 torts × 8 fields is 320 values, and hand-entry is precisely the grind that introduces drift (**R14**).
