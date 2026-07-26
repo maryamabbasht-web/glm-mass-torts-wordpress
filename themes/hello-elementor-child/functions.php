@@ -77,6 +77,7 @@ require_once GLM_DIR . '/inc/post-types.php';
 require_once GLM_DIR . '/inc/taxonomies.php';
 require_once GLM_DIR . '/inc/tort-grid.php';
 require_once GLM_DIR . '/inc/socials.php';
+require_once GLM_DIR . '/inc/content-blocks.php';
 require_once GLM_DIR . '/inc/elementor-kit.php';
 require_once GLM_DIR . '/inc/elementor-sections.php';
 
