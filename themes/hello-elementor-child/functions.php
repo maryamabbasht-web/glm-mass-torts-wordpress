@@ -76,6 +76,7 @@ add_filter( 'acf/settings/load_json', 'glm_acf_json_load_point' );
 require_once GLM_DIR . '/inc/post-types.php';
 require_once GLM_DIR . '/inc/taxonomies.php';
 require_once GLM_DIR . '/inc/tort-grid.php';
+require_once GLM_DIR . '/inc/socials.php';
 
 // Admin UI, plus WP-CLI so the import is scriptable and repeatable.
 if ( is_admin() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {

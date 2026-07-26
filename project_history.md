@@ -6,6 +6,47 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-26 — Social icons de-hotlinked; brand asset home created
+
+**Type:** `feat` · **Branch:** `feat/socials-and-brand`
+
+### What changed
+
+- Added `inc/socials.php` — `[glm_socials]`, rendering social links from Font Awesome
+- Added social styles to `components.css`
+- Added `brand/` at the repo root with a README, as the home for logo masters
+
+### Why
+
+The source hotlinked **five social SVGs from another project's staging server**. That is a live outage waiting to happen: when that staging site is pruned or rebuilt, the icons vanish from production. Elementor already bundles Font Awesome, so the replacements cost nothing.
+
+### The X problem
+
+Elementor bundles **Font Awesome 5 Free**. `fa-x-twitter` only exists in Font Awesome 6. The profile links to `x.com`, so falling back to the old bird would be visibly outdated branding.
+
+Resolved with a ~300-byte inline SVG for X and Font Awesome for the other four. No extra library, exact mark.
+
+### Two enqueue gotchas, both real
+
+1. Elementor only enqueues Font Awesome when one of **its own** icon widgets renders. A shortcode using `fab` classes on a page without one would show empty squares.
+2. Enqueueing from inside a shortcode runs during `the_content`, **after `wp_head` has printed**. The stylesheet then lands in the footer and icons pop in after paint.
+
+Both fixed by also hooking `wp_enqueue_scripts`. Verified on a real front-end render that the stylesheet appears in `<head>`, not the footer — a distinction the WP-CLI test could not have shown, because `wp_enqueue_scripts` never fires there.
+
+> Worth keeping: the first test said "Font Awesome not registered" and looked like a failure. It was a **false negative** — WP-CLI has no front-end enqueue cycle. Testing in the wrong context produces confident, wrong answers in both directions.
+
+### Logo
+
+`brand/` now exists as the documented home for logo masters, because `wp-content/uploads/` is excluded from git. Masters live in the repo; the Media Library holds a working copy imported with `studio wp media import`.
+
+Also found: the nav and footer logos are pulled from **two different staging servers** and are **different files** (1446 vs 1545 bytes). The same logo has already forked. Both are ~1.5 KB PNGs, almost certainly too low-resolution for modern displays.
+
+### Verification
+
+Rendered on a real page: 5 links, 4 Font Awesome icons, 1 inline SVG, 5 screen-reader labels, Font Awesome in `<head>`, **zero staging references**. Test page deleted afterwards.
+
+---
+
 ## 2026-07-26 — Site live: theme activated, 40 torts imported and verified
 
 **Type:** `feat` / `fix` · **Branch:** `fix/taxonomy-template` · **Tag:** `phase-3-live`

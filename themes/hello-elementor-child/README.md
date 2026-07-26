@@ -75,6 +75,26 @@ The source claimed "35+". There are 40.
 | `[glm_tort_grid category="pharma" tabs="no"]` | One category, flat grid |
 | `[glm_tort_count]` | Live published tort count |
 | `[glm_tort_options]` | `<option>` tags for the contact form's case-type field |
+| `[glm_socials]` | Social links using Font Awesome — replaces 5 hotlinked staging SVGs |
+
+### Social icons and the X problem
+
+Elementor bundles **Font Awesome 5 Free**, which covers `fa-facebook-f`, `fa-linkedin-in`, `fa-instagram` and `fa-youtube` at no extra cost.
+
+It does **not** contain `fa-x-twitter` — that arrived in Font Awesome 6. Since the profile links to `x.com`, the shortcode renders X as a ~300-byte inline SVG rather than falling back to the outdated bird. To use the bird instead, set `'icon' => 'fa-twitter'` on that entry.
+
+URLs live in `glm_social_profiles()` and are filterable:
+
+```php
+add_filter( 'glm_social_profiles', function ( $p ) {
+    $p['facebook']['url'] = 'https://facebook.com/newhandle';
+    return $p;
+} );
+```
+
+> **Gotcha handled:** Elementor only enqueues Font Awesome when one of *its* icon widgets renders. A shortcode using `fab` classes on a page without one would show empty squares. Worse, enqueueing from inside a shortcode runs during `the_content` — after `wp_head` has printed — so the stylesheet lands in the footer and icons pop in after paint. The enqueue therefore also runs on `wp_enqueue_scripts`. Verified loading in `<head>`.
+>
+> **Open for Phase 5:** once the header carries an Elementor phone icon, check Font Awesome is not being loaded twice.
 
 ### Attributes for `glm_tort_grid`
 
