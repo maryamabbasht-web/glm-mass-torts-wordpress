@@ -6,6 +6,48 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-26 — Phase 1: component inventory
+
+**Type:** `docs` · **Branch:** `docs/component-inventory` · **Tag:** `phase-1-inventory`
+
+### What changed
+
+- Added `source/glmasstorts.html` (123 KB, 1,822 lines) — the design reference
+- Wrote `docs/component-inventory.md` — 14 components, 3 CPTs with full field lists, 5 source defects, and the tort-grid decision
+- Wrote `docs/design-tokens.md` — colour palette, type scale, spacing, breakpoints, assets needing re-hosting
+- Wrote `docs/page-map.md` — 10 pages, URL scheme, navigation mapping, component usage matrix
+- Updated `README.md` and `docs/README.md` to reflect Phase 1 completion
+
+### Why
+
+The source had to be understood as a **component system** before any WordPress work began. Porting it section by section is the trap that produces an unmaintainable site.
+
+### What the analysis found
+
+The site is **one page containing 14 distinct components and 40 pieces of repeating data** — not twenty pages of markup. Splitting it produces **10 hand-built pages plus 46 generated ones**.
+
+**Five defects in the source**, two of which are this project's founding problem caught in the act:
+
+1. **18 duplicated tort cards.** Three tab panels appear twice with duplicate `id` attributes. Since `showTab()` uses `getElementById()`, the second copy of each renders into the DOM but can never display. 60 `<h4>` elements, only 42 unique. Copy-paste drift, invisible, shipping for months.
+2. **The tort count is wrong.** The page says "35+" in two hardcoded places; there are 40. Someone added five and did not update the counter.
+3. **"About Us" links to the wrong section.** `id="about"` sits on Divisions; the About section has no id at all.
+4. **Malformed CSS comments** (`/* … /`, `/ … */`) silently swallow the rules that follow, so parts of the stylesheet are inert. Rebuild from intent, not from a byte-for-byte port.
+5. **Every image is hotlinked from staging servers** — two different ones for the same logo. When either staging site is pruned, the production logo disappears.
+
+Defects 1 and 2 are precisely why **R4** (shortcode-synced templates, never copy-paste) and **R5** (repeating data in the database) exist. Under those rules neither failure is possible: a shortcode template cannot drift from itself, and `wp_count_posts()` cannot be stale.
+
+### Also discovered
+
+The file is a **Claude Artifact export**, not a website export. Lines 1–235 are sandbox runtime — `window.claude`, `postMessage` plumbing, a `fetch` override, and `<body id="artifacts-component-root-html">`. Discarded entirely.
+
+The design tokens are already CSS custom properties, which is good practice — but the **names are lies**. `--gold` is `#506CFB`, an indigo blue. A rebrand changed the values and left the names, and `#c8a84b` (real gold) still appears hardcoded in places, bypassing the variables. Renaming to role-based names (`--color-accent`) during migration, because it is free now and expensive later.
+
+### Decision raised, not yet made
+
+**How to build the tort grid.** Elementor Free has no ACF dynamic tags, and six of the tort card's eight fields are ACF fields, so no free grid widget can render it. Recommended a custom `[glm_tort_grid]` shortcode in the child theme — roughly 120 lines of PHP that put the site's most complex component into version control, which is a direct win against **R12**. Alternatives documented in `docs/component-inventory.md` §5.
+
+---
+
 ## 2026-07-26 — Phase 0: repository foundation
 
 **Type:** `chore` · **Branches:** `main`, `chore/repo-foundation` · **Tag:** `phase-0-foundations`

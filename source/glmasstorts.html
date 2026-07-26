@@ -1,0 +1,1823 @@
+<html lang="en"><head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.13/html-to-image.min.js" integrity="sha512-iZ2ORl595Wx6miw+GuadDet4WQbdSWS3JLMoNfY8cRGoEFy6oT3G9IbcrBeL6AfkgpA51ETt/faX6yLV+/gFJg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script>
+      (function() {
+        const originalConsole = window.console;
+        window.console = {
+          log: (...args) => {
+            originalConsole.log(...args);
+            window.parent.postMessage({ type: 'console', message: args.join(' ') }, '*');
+          },
+          error: (...args) => {
+            originalConsole.error(...args);
+            window.parent.postMessage({ type: 'console', message: 'Error: ' + args.join(' ') }, '*');
+          },
+          warn: (...args) => {
+            originalConsole.warn(...args);
+            window.parent.postMessage({ type: 'console', message: 'Warning: ' + args.join(' ') }, '*');
+          }
+        };
+
+    let requestId = 0;
+    let callbacksMap = new Map();
+    let streamControllers = new Map();
+    
+    window.claude = {
+      complete: (prompt) => {
+        return new Promise((resolve, reject) => {
+          const id = requestId++;
+          callbacksMap.set(id, { resolve, reject });
+          window.parent.postMessage({ type: 'claudeComplete', id, prompt }, '*');
+        });
+      }
+    };
+
+    window.storage = {
+      get: (key, shared = false) => {
+        return new Promise((resolve, reject) => {
+          const id = requestId++;
+          callbacksMap.set(id, { resolve, reject });
+          window.parent.postMessage({ type: 'storageGet', id, key, shared }, '*');
+        });
+      },
+      set: (key, value, shared = false) => {
+        return new Promise((resolve, reject) => {
+          const id = requestId++;
+          callbacksMap.set(id, { resolve, reject });
+          window.parent.postMessage({ type: 'storageSet', id, key, value, shared }, '*');
+        });
+      },
+      delete: (key, shared = false) => {
+        return new Promise((resolve, reject) => {
+          const id = requestId++;
+          callbacksMap.set(id, { resolve, reject });
+          window.parent.postMessage({ type: 'storageDelete', id, key, shared }, '*');
+        });
+      },
+      list: (prefix, shared = false) => {
+        return new Promise((resolve, reject) => {
+          const id = requestId++;
+          callbacksMap.set(id, { resolve, reject });
+          window.parent.postMessage({ type: 'storageList', id, prefix, shared }, '*');
+        });
+      }
+    };
+
+    let pendingBlobs = new Map();
+    URL.createObjectURL = (blob) => {
+      // Store the blob and create an ID and URL for it
+      const blobId = `blob-${Date.now()}-${Math.random()}`;
+      pendingBlobs.set(blobId, blob);
+      return `blob-request://${blobId}`;
+    };
+
+    URL.revokeObjectURL = (url) => {
+      // Remove the blob from our store
+      const blobId = url.replace("blob-request://", "");
+      pendingBlobs.delete(blobId);
+    };
+
+    const getBlobFromURL = (url) => {
+      const blobId = url.replace("blob-request://", "");
+      return pendingBlobs.get(blobId);
+    };
+
+    // Override global fetch with streaming support
+    window.fetch = (url, init = {}) => {
+      return new Promise((resolve, reject) => {
+        const id = requestId++;
+        const channelId = `fetch-${id}-${Date.now()}`;
+        
+        callbacksMap.set(id, { 
+          resolve: (response) => {
+            // Create a ReadableStream for the response body
+            const stream = new ReadableStream({
+              start(controller) {
+                streamControllers.set(channelId, controller);
+              },
+              cancel() {
+                streamControllers.delete(channelId);
+              }
+            });
+            
+            // Create and return the Response with the stream
+            resolve(new Response(stream, {
+              status: response.status,
+              statusText: response.statusText,
+              headers: response.headers
+            }));
+          },
+          reject,
+          channelId
+        });
+        
+        window.parent.postMessage({
+          type: 'proxyFetch',
+          id,
+          url,
+          init,
+          channelId
+        }, '*');
+      });
+    };
+
+    window.addEventListener('message', async (event) => {
+      if (event.data.type === 'takeScreenshot') {
+        const rootElement = document.getElementById('artifacts-component-root-html');
+        if (!rootElement) {
+          window.parent.postMessage({
+            type: 'screenshotError',
+            error: new Error('Root element not found'),
+          }, '*');
+        }
+        const screenshot = await htmlToImage.toPng(rootElement, {
+          imagePlaceholder:
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAAXNSR0IArs4c6QAAAA1JREFUGFdjePDgwX8ACOQDoNsk0PMAAAAASUVORK5CYII=",
+        });
+        window.parent.postMessage({
+          type: 'screenshotData',
+          data: screenshot,
+        }, '*');
+      } else if (event.data.type === 'claudeComplete') {
+        const callback = callbacksMap.get(event.data.id);
+        if (event.data.error) {
+          callback.reject(new Error(event.data.error));
+        } else {
+          callback.resolve(event.data.completion);
+        }
+        callbacksMap.delete(event.data.id);
+      } else if (event.data.type === 'proxyFetchResponse') {
+        const callback = callbacksMap.get(event.data.id);
+        if (event.data.error) {
+          callback.reject(new Error(event.data.error));
+          callbacksMap.delete(event.data.id);
+        } else {
+          // Initial response with headers, status, etc.
+          callback.resolve({
+            status: event.data.status,
+            statusText: event.data.statusText,
+            headers: event.data.headers
+          });
+          // Don't delete the callback yet if streaming
+          if (!event.data.body) {
+            callbacksMap.delete(event.data.id);
+          }
+        }
+      } else if (event.data.type === 'proxyFetchStream') {
+        // Handle streaming data chunks
+        const controller = streamControllers.get(event.data.channelId);
+        if (controller) {
+          if (event.data.error) {
+            controller.error(new Error(event.data.error));
+            streamControllers.delete(event.data.channelId);
+          } else if (event.data.done) {
+            controller.close();
+            streamControllers.delete(event.data.channelId);
+            // Clean up the callback
+            const callback = Array.from(callbacksMap.entries()).find(
+              ([_, value]) => value.channelId === event.data.channelId
+            );
+            if (callback) {
+              callbacksMap.delete(callback[0]);
+            }
+          } else if (event.data.chunk) {
+            controller.enqueue(new Uint8Array(event.data.chunk));
+          }
+        }
+      } else if (event.data.type === 'storageGet') {
+        const callback = callbacksMap.get(event.data.id);
+        if (event.data.error) {
+          callback.reject(new Error(event.data.error));
+        } else {
+          callback.resolve(event.data.result);
+        }
+        callbacksMap.delete(event.data.id);
+      } else if (event.data.type === 'storageSet') {
+        const callback = callbacksMap.get(event.data.id);
+        if (event.data.error) {
+          callback.reject(new Error(event.data.error));
+        } else {
+          callback.resolve(event.data.result);
+        }
+        callbacksMap.delete(event.data.id);
+      } else if (event.data.type === 'storageDelete') {
+        const callback = callbacksMap.get(event.data.id);
+        if (event.data.error) {
+          callback.reject(new Error(event.data.error));
+        } else {
+          callback.resolve(event.data.result);
+        }
+        callbacksMap.delete(event.data.id);
+      } else if (event.data.type === 'storageList') {
+        const callback = callbacksMap.get(event.data.id);
+        if (event.data.error) {
+          callback.reject(new Error(event.data.error));
+        } else {
+          callback.resolve(event.data.result);
+        }
+        callbacksMap.delete(event.data.id);
+      }
+    });
+
+
+    const originalOpen = window.open;
+    window.open = function (url) {
+      window.parent.postMessage({
+        type: "openExternal",
+        href: url,
+      }, "*");
+    };
+
+    window.addEventListener('error', (event) => {
+      window.parent.postMessage({ type: 'console', message: 'Uncaught Error: ' + event.message }, '*');
+    });
+  })();
+</script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mass Tort Law &amp; Complex Tort Litigations | Ged Lawyers</title>
+
+<meta name="description" content="Facing a mass tort? Ged Lawyers provide relentless advocacy in tort litigations and high-stakes tort cases. Contact our mass tort attorneys for a free consult.">
+
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&amp;family=Outfit:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<!-- Add icon library -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+<style>
+:root {
+  --navy:       #0b1929;
+  --navy-2:     #201e6b;
+  --navy-3:     #1a3560;
+  --gold:       #506CFB;
+  --gold-light: #DBE1FB;
+  --gold-pale:  #dfe6fe;
+  --cream:      #eff7f8;
+  --white:      #ffffff;
+  --text:       #0b1929;
+  --muted:      #5a6a7e;
+  --border:     #506CFB;
+  --red:        #b91c1c;
+  --call:       #01C53D;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }html { scroll-behavior: smooth; }
+
+body {font-family: 'Outfit', sans-serif;background: var(--cream);color: var(--text);line-height: 1.65;overflow-x: hidden;}
+
+/* ─── NAV ─── */nav {background: var(--navy-2);border-bottom: 3px solid var(--gold);padding: 0 30px;display: flex; align-items: center; justify-content: space-between;position: sticky; top: 0; z-index: 100;box-shadow: 0 2px 20px rgba(11,25,41,0.12);}.nav-logo {display: flex; flex-direction: column; padding: 18px 0;}.nav-logo-main {
+
+font-family: 'Cormorant Garamond', serif;font-size: 28px; font-weight: 700; color: var(--navy);letter-spacing: 1px; line-height: 1;}.nav-links { display: flex; align-items: center; gap: 40px; }.nav-links a {font-size: 14px; font-weight: 500; color: var(--white);text-decoration: none; padding: 8px 14px; border-radius: 2px;transition: color 0.2s, background 0.2s;letter-spacing: 0.3px;}.nav-links a { color: var(--gold-light);  }.nav-cta {background: var(--call) !important;color: var(--white) !important;font-weight: 600 !important;padding: 10px 22px !important;display: inline-flex;align-items: center;gap: 10px;}.nav-cta { background: var(--call) !important; filter: brightness(1.1); }.nav-icon-btn{color: white;}/* ─── DROPDOWN ─── */.nav-dropdown { position: relative; }.nav-dropdown-trigger {font-size: 13px; font-weight: 500; color: var(--muted);text-decoration: none; padding: 8px 14px; border-radius: 2px;transition: color 0.2s, background 0.2s; cursor: pointer; display: block;letter-spacing: 0.3px;}.nav-dropdown-trigger { color: var(--navy); }.nav-dropdown-menu {display: none; position: absolute; top: 100%; left: -200px;background: var(--white); box-shadow: 0 12px 40px rgba(11,25,41,0.18);border-top: 3px solid var(--gold); border-radius: 0 0 4px 4px;padding: 28px; z-index: 200; min-width: 780px;grid-template-columns: repeat(4, 1fr); gap: 0;}.nav-dropdown-menu-divisions{display: none; position: absolute; top: 100%; left: 0;background: var(--white); box-shadow: 0 12px 40px rgba(11,25,41,0.18);border-top: 3px solid var(--gold); border-radius: 0 0 4px 4px;padding: 20px; z-index: 200; min-width: 280px;gap: 0;}.nav-dropdown .nav-dropdown-menu { display: grid; }.nav-dropdown .nav-dropdown-menu-divisions { display: grid; }.custom-link{color: var(--muted) !important;font-weight: 400 !important;margin-top: 0 !important;
+
+}.custom-link{color: var(--navy) !important;}.dropdown-col { padding: 0 20px; border-right: 1px solid var(--border); }.dropdown-col { border-right: none; }.dropdown-col-title {font-size: 14px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;color: var(--gold); margin-bottom: 12px; padding-bottom: 8px;border-bottom: 1px solid var(--border);}.dropdown-col a {display: block; font-size: 14px; color: var(--muted); text-decoration: none;padding: 5px 0; transition: color 0.15s; font-weight: 400;}.dropdown-col a { color: var(--navy); }.dropdown-col a { color: var(--gold); font-weight: 600; margin-top: 6px; }
+
+/* ─── STATUS BADGES ─── */.tort-status-row {display: flex; align-items: start; justify-content: space-between;margin-bottom: 10px; flex-wrap: wrap; gap: 6px;}.status-badge {display: inline-flex; align-items: center; gap: 5px;font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;padding: 3px 9px; border-radius: 20px;}.status-not-active  {background: #808080a6;color: black;}.status-active    { background: #dcfce7; color: #15803d; }.status-settling  { background: #fef3c7; color: #92400e; }.status-emerging  { background: #e0f2fe; color: #0369a1; }.status-appellate { background: #f3e8ff; color: #7e22ce; }.status-dot {width: 6px; height: 6px; border-radius: 50%; display: inline-block;}.status-not-active  .status-dot {background: gray;}.status-active .status-dot    { background: #16a34a; }.status-settling .status-dot  { background: #d97706; }.status-emerging .status-dot  { background: #0284c7; }.status-appellate .status-dot { background: #9333ea; }
+
+.tort-card.tort-featured .status-badge { background: rgba(255,255,255,0.1); }.header-links{display: flex;/* margin-right: 50px; */}.header-logo{width: 22px;height: 21.600000381469727px;margin-inline: 24px;margin-block: 11px;
+
+}
+
+/* ─── HERO ─── */.hero {display: flex;flex-direction: column;background: var(--navy-2);position: relative; overflow: hidden;padding: 100px 48px 50px;min-height: 620px;align-items: center;
+
+}.hero::before {content: '';position: absolute; inset: 0;
+
+}.hero-rule {position: absolute; top: 0; left: 0; right: 0; height: 4px;background: linear-gradient(90deg, var(--gold) 0%, var(--gold-light) 50%, var(--gold) 100%);}.hero-inner {position: relative; z-index: 2;max-width: 1200px; margin: 0 auto; width: 100%;display: grid; grid-template-columns: 1fr 420px; gap: 80px; align-items: center;padding-bottom: 48px;}.hero-eyebrow {display: inline-flex; align-items: center; gap: 10px;font-size: 11px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;color: var(--gold); margin-bottom: 24px;}.hero-eyebrow::before {content: ''; display: block;width: 32px; height: 1px; background: var(--gold);}.hero h1 {font-family: 'Cormorant Garamond', serif;font-size: clamp(42px, 5.5vw, 76px);font-weight: 700; line-height: 1.07;color: var(--white); margin-bottom: 24px;}.hero h1 em { font-style: italic; color: var(--gold-light); }.hero-lead {font-size: 17px; color: rgba(255,255,255,0.68);font-weight: 300; line-height: 1.8;max-width: 560px; margin-bottom: 40px;}.hero-actions { display: flex; gap: 16px; flex-wrap: wrap; }.btn-primary {display: inline-flex; align-items: center; gap: 10px;background: var(--call); color: var(--white);font-weight: 600; font-size: 14px; letter-spacing: 0.8px; text-transform: uppercase;padding: 16px 36px; text-decoration: none; border-radius: 2px;transition: background 0.2s, transform 0.15s;border: none; cursor: pointer;}.btn-primary { background: var(--call); filter: brightness(1.1); transform: translateY(-1px); }.btn-outline {display: inline-flex; align-items: center; gap: 10px;background: transparent; color: var(--white);font-weight: 500; font-size: 14px; letter-spacing: 0.8px;padding: 16px 32px; text-decoration: none; border-radius: 2px;border: 1px solid rgba(255,255,255,0.3);transition: border-color 0.2s, background 0.2s;}.btn-outline { border-color: var(--gold); background: rgba(200,168,75,0.08); }
+
+/* Hero form card */.hero-card {
+
+background: var(--white);border-radius: 4px;padding: 40px 36px;box-shadow: 0 24px 64px rgba(0,0,0,0.3);position: relative;}.hero-card::before {content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;background: var(--gold); border-radius: 4px 4px 0 0;}.hero-card h3 {font-family: 'Cormorant Garamond', serif;font-size: 22px; font-weight: 700; color: var(--navy);margin-bottom: 6px;}.hero-card p { font-size: 13px; color: var(--muted); margin-bottom: 24px; }.form-group { margin-bottom: 14px; }.form-group label {display: block; font-size: 11px; font-weight: 600; letter-spacing: 1px;text-transform: uppercase; color: var(--muted); margin-bottom: 6px;}.form-group input,.form-group select,.form-group textarea {width: 100%; padding: 12px 14px;border: 1.5px solid var(--border); border-radius: 2px;font-family: 'Outfit', sans-serif; font-size: 14px; color: var(--text);background: var(--cream); transition: border-color 0.2s;outline: none;}.form-group input,.form-group select,.form-group textarea { border-color: var(--gold); background: var(--white); }.form-group textarea { resize: vertical; min-height: 80px; }.form-submit {width: 30%; padding: 15px;align-self: center;background: var(--navy); color: var(--white);font-family: 'Outfit', sans-serif; font-size: 14px; font-weight: 400;letter-spacing: 1px; text-transform: uppercase;border: none; border-radius: 2px; cursor: pointer;transition: background 0.2s; margin-top: 4px;}.hero-card .form-submit {background: var(--gold); color: white;}
+
+/* .hero-card  .form-submit { background: var(--gold-light); } // .form-submit { background: var(--navy-3); } /.form-disclaimer {font-size: 10px; color: var(--muted);margin-top: 12px; line-height: 1.5;}.form-phone-alt {text-align: center; margin-top: 16px; padding-top: 16px;border-top: 1px solid var(--border);}.form-phone-alt span { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }.form-phone-alt a {padding-top: 0;padding-bottom: 8px;letter-spacing: 0.8px;text-transform: uppercase;padding: 16px 36px;font-weight: 600;font-size: 14px; color: white;text-decoration: none; letter-spacing: 1px;}/ .form-phone-alt a { color: var(--gold); } */
+
+/* ─── STATS BAR ─── */.stats-bar {display: flex;justify-content: center;flex-wrap: wrap;width: 100%;max-width: 1200px;margin-top: 48px;border-radius: 10px;background: rgb(0 0 0 / 27%);position: relative;z-index: 2;
+
+box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);}.stat-item {padding: 22px 40px;text-align: center;border-right: 1px solid rgba(255, 255, 255, 0.12);flex: 1;min-width: 160px;display: flex;align-items: center;gap: 14px;justify-content: center;}.stat-item { border-right: none; }.stat-icon {font-size: 22px; opacity: 0.7; flex-shrink: 0;}.stat-text { display: flex; flex-direction: column;    justify-content: center;align-items: center; }.stat-num {font-family: 'Cormorant Garamond', serif;font-size: 34px;font-weight: 700;color: white;display: block;line-height: 1;}.stat-lbl {font-size: 10px;font-weight: 600;letter-spacing: 2px;text-transform: uppercase;color: #B9B9B9;margin-top: 5px;text-align: center;}
+
+/* ─── SECTION SHARED ─── */.section { padding: 90px 48px; }.section-inner { max-width: 1200px; margin: 0 auto; }.section-tag {font-size: 10px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;color: var(--gold); display: flex; align-items: center; gap: 10px; margin-bottom: 14px;}.section-tag::before { content: ''; display: block; width: 28px; height: 1px; background: var(--gold); }.section-title {font-family: 'Cormorant Garamond', serif;font-size: clamp(30px, 4vw, 50px); font-weight: 700; line-height: 1.15; color: var(--navy);}.section-title em { font-style: italic; color: var(--gold); }
+
+/* ─── ABOUT ─── */.about { background: var(--white); }.about-grid {display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center;}.about-text p {font-size: 16px; color: var(--muted); font-weight: 300;line-height: 1.85; margin-top: 24px;}.about-text p + p { margin-top: 16px; }.about-highlights {display: grid; grid-template-columns: 1fr 1fr; gap: 2px;background: var(--border); border: 2px solid var(--border);margin-top: 36px;}.highlight-box {background: var(--white); padding: 28px 24px;transition: background 0.2s;}.highlight-box { background: var(--gold-pale); }.highlight-icon { font-size: 22px; margin-bottom: 10px; }.highlight-label {font-size: 13px; font-weight: 600; color: var(--navy); margin-bottom: 4px;}.highlight-sub { font-size: 12px; color: var(--muted); }
+
+.about-right {}.verdict-list { list-style: none; }.verdict-item {display: flex; align-items: flex-start; gap: 20px;padding: 24px 0; border-bottom: 1px solid var(--border);}.verdict-item { border-top: 1px solid var(--border); }.verdict-amount {font-family: 'Cormorant Garamond', serif;font-size: 32px; font-weight: 700; color: var(--gold);white-space: nowrap; line-height: 1;}.verdict-info {}.verdict-case { font-size: 14px; font-weight: 600; color: var(--navy); }.verdict-type { font-size: 12px; color: var(--muted); margin-top: 3px; }.about-disclaimer {font-size: 11px; color: var(--muted); margin-top: 20px;font-style: italic; line-height: 1.5;}.btn-outline{color;}.btn-primary{color;}/* ─── DIVISIONS ─── */.divisions { background: var(--navy-2); }.divisions .section-title { color: var(--white); }.divisions .section-tag { color: var(--gold); }.divisions .section-tag::before { background: var(--gold); }.div-grid {display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px;background: rgba(255,255,255,0.06); margin-top: 52px;}.div-card {background: var(--navy-2); padding: 48px 36px;position: relative; overflow: hidden;transition: background 0.2s;text-decoration: none; color: inherit; display: block;}.div-card { background: rgba(255,255,255,0.04); }.div-card::after {content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;background: var(--gold); transform: scaleX(0); transform-origin: left;transition: transform 0.3s;}.div-card:hover::after { transform: scaleX(1); }.div-num {font-family: 'Cormorant Garamond', serif;font-size: 56px; font-weight: 700;color; line-height: 1;margin-bottom: 16px;}.div-icon { font-size: 32px; margin-bottom: 20px; }.div-title {font-family: 'Cormorant Garamond', serif;font-size: 24px; font-weight: 700; color: var(--white); margin-bottom: 12px;}.div-desc { font-size: 14px; color: white; line-height: 1.7; font-weight: 300; }.div-link {display: flex; align-items: center; gap: 6px; justify-content: flex-end;font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;color: var(--call); margin-top: 24px; text-decoration: none;}.div-link { color: #01c53db5;}.div-link::after { content: '→'; transition: transform 0.2s; }.div-card .div-link::after { transform: translateX(5px); }
+
+/* ─── MASS TORTS ─── */.mass-torts { background: var(--cream); }.torts-header {display: flex; align-items: flex-end; justify-content: space-between;margin-bottom: 52px; gap: 24px; flex-wrap: wrap;}.torts-header-right { text-align: right; }.torts-count {font-family: 'Cormorant Garamond', serif;font-size: 80px; font-weight: 700; color: var(--gold);line-height: 1;}
+
+/* Category tabs */.tort-tabs {display: flex; gap: 2px; margin-bottom: 3px; flex-wrap: wrap;}.tort-tab {background: var(--gold-pale) !important;padding: 10px 20px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px;background: var(--white); border: none; cursor: pointer; color: var(--muted);transition: all 0.2s; border-bottom: 2px solid transparent;}.tort-tab { color: var(--navy); border-bottom-color: var(--border); }.tort-tab.active { color: var(--navy); background: var(--gold-pale); border-bottom-color: var(--gold); }
+
+.tort-section { display: none; }.tort-section.active { display: block; }
+
+.cat-header {background: var(--navy); color: var(--white);padding: 20px 32px; display: flex; align-items: center; justify-content: space-between;margin-bottom: 2px;}.cat-title {font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 700;}.cat-count {font-size: 11px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase;color: var(--gold);}
+
+.tort-grid {display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));gap: 2px; background: white;}.tort-coming-soon {display: flex !important;justify-content: center;align-items: center;}.tort-card {background: var(--white); padding: 30px 28px;text-decoration: none; color: inherit; display: block;position: relative; overflow: hidden;transition: background 0.18s;}.tort-card { background: #dfe6fe; }.tort-card::after {content: ''; position: absolute; bottom: 0; left: 0;width: 0; height: 3px; background: #506CFB;transition: width 0.3s;}.tort-card:hover::after { width: 100%; }.tort-pill {display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 1.5px;text-transform: uppercase; padding: 3px 10px; border-radius: 2px; margin-bottom: 12px;}.pill-pharma  { background: #e8f0fe; color: #1a56c7; }.pill-device  { background: #e8f8ee; color: #166534; }.pill-toxic   { background: var(--gold-pale); color: var(--navy-2); }.pill-abuse   { background: #fde8e8; color: #9b1c1c; }.pill-tech    { background: #f0e8ff; color: #6b21a8; }.pill-product { background: #fef3c7; color: #92400e; }.pill-emerging{ background: #f0fdf4; color: #166534; }
+
+.tort-card h4 {font-family: 'Cormorant Garamond', serif;font-size: 19px; font-weight: 700; color: var(--navy);line-height: 1.3; margin-bottom: 10px;}.tort-card p {font-size: 13px; color: var(--muted); line-height: 1.7; font-weight: 300;}.tort-footer {display: flex; align-items: center; justify-content: space-between;margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border);gap: 10px; flex-wrap: wrap;}.tort-mdl { font-size: 10px; color: rgba(90,106,126,0.7); font-weight: 500; flex: 1; min-width: 0; }.tort-arrow { color: var(--gold); font-size: 16px; transition: transform 0.2s; flex-shrink: 0; }.tort-card .tort-arrow { transform: translateX(4px); }.settlement-badge {display: inline-block;font-size: 10px; font-weight: 700;color: var(--navy); background: var(--gold-pale);border: 1px solid var(--gold);padding: 4px 10px; border-radius: 2px;letter-spacing: 0.3px; white-space: nowrap; flex-shrink: 0;}.tort-card.tort-featured .settlement-badge {background: rgba(200,168,75,0.15);border-color: #506CFB;color: var(--gold-light);}
+
+/* Featured tort card /.tort-card.tort-featured {grid-column: span 2;background: var(--navy);display: grid; grid-template-columns: 1fr 280px; gap: 40px; align-items: center;padding: 40px 40px;}.tort-card.tort-featured { background: #112240; }.tort-card.tort-featured h4 { color: var(--white); font-size: 24px; }.tort-card.tort-featured p { color: rgba(255,255,255,0.6); }.tort-card.tort-featured .tort-footer { border-top-color: rgba(255,255,255,0.12); }.tort-card.tort-featured .tort-mdl { color: rgba(255,255,255,0.35); }.feat-stat {background: #dfe6fe; border: 1px solid var(--gold);border-radius: 3px; padding: 24px; text-align: center;}.feat-stat-num {font-family: 'Cormorant Garamond', serif;font-size: 42px; font-weight: 700; color: var(--navy-2); line-height: 1; display: block;}.feat-stat-lbl { font-size: 11px; color: black; margin-top: 8px; display: block; line-height: 1.5; }.feat-stat-lbl-black { font-size: 11px; color: var(--navy); margin-top: 8px; display: block; line-height: 1.5; }/ ─── CONTACT / LOCATIONS ─── */.contact-section { background: var(--navy); }.contact-section .section-title { color: var(--white); }.contact-section .section-tag { color: var(--gold); }.contact-section .section-tag::before { background: var(--gold); }
+
+.contact-grid {display: grid; grid-template-columns: 1fr; gap: 60px; margin-top: 52px;}
+
+/* Contact form /.contact-form-wrap {}.contact-form-wrap h3 {font-family: 'Cormorant Garamond', serif;font-size: 28px; font-weight: 700; color: var(--white); margin-bottom: 8px;}.contact-form-wrap .contact-form input,.contact-form-wrap .contact-form select,.contact-form-wrap .contact-form textarea {background: rgba(255,255,255,0.06);border-color: rgba(255,255,255,0.12);color: var(--white) !important;}.contact-form-wrap > p { font-size: 14px; color: rgba(255,255,255,0.55); margin-bottom: 28px; }.contact-form { display: flex; flex-direction: column; gap: 14px; }.contact-form .form-group label { color: rgba(255,255,255,0.5); }.contact-form input,.contact-form select,.contact-form textarea {background: rgba(255,255,255,0.06);border-color: rgba(255,255,255,0.12);color: var(--white);}.contact-form input::placeholder,.contact-form textarea::placeholder { color: rgba(255,255,255,0.3); }.contact-form input,.contact-form select,.contact-form textarea {background: rgba(255,255,255,0.1); border-color: var(--gold);}.contact-form select option { background: var(--navy-2); color: var(--white); }.contact-form .form-submit {border-top-right-radius: 5px; border-bottom-right-radius: 5px;border-top-left-radius: 0; border-bottom-left-radius: 0;background: var(--call); color: white;}/ .contact-form .form-submit { background: var(--gold-light); } /.contact-form .form-disclaimer { color: rgba(255,255,255,0.3); }.news-form{margin-top: 10px;display: grid;gap: 0;grid-template-columns: 1fr .25fr;}/ Locations */.locations-wrap {display: flex; flex-direction: row;}.phone-big {display: flex; align-items: center; gap: 14px;background: rgba(200,168,75,0.1); border: 1px solid rgba(200,168,75,0.25);border-radius: 3px; padding: 20px 24px; margin-bottom: 32px;text-decoration: none;}.phone-big-icon { font-size: 24px; }.phone-big-text {}.phone-big-label { font-size: 10px; font-weight: 600; letter-spacing: 2px; text-transform: uppercase; color: #c8a84b; display: block; }.phone-big-num { font-family: 'Cormorant Garamond', serif; font-size: 34px; font-weight: 700; color: var(--white); line-height: 1.1; display: block; }
+
+.loc-state { flex:1;margin-bottom: 28px; }.loc-state-name {font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;color: var(--call);padding-bottom: 15px;}.loc-offices { display: flex; flex-direction: column ; gap: 20px; }.loc-office {}.loc-state-all{display: flex; flex-direction: row;}.loc-state-right{flex:1;}.loc-city { font-size: 13px; font-weight: 800; color: var(--white);}.loc-address { font-size: 11px; color: var(--white); line-height: 1.6; }.loc-phone { font-size: 11px; color: var(--white) !important;  }
+
+/* ─── FOOTER ─── /.footer-col{flex: 1;}footer {background: var(--navy-2); border-top: 3px solid #506CFB;/ padding-top: 80px;padding-bottom: 25px; */padding: 90px 48px;}.footer-inner { max-width: 1200px; margin: 0 auto; }.footer-top {display: flex; flex-direction: row; gap: 100px;padding-bottom: 36px; border-bottom: 1px solid rgba(255,255,255,0.08);}.footer-brand {}.footer-logo {font-family: 'Cormorant Garamond', serif;font-size: 28px; font-weight: 700; color: var(--white); display: block; margin-bottom: 4px;}.footer-domain { font-size: 12px; color: #c8a84b; letter-spacing: 1px; margin-bottom: 14px; display: block; }.footer-desc { font-size: 14px; color: white; line-height: 1.7; font-weight: 400; }.footer-col h4 {font-size: 18px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;color ; margin-bottom: 35px;}.footer-link {font-size: 16px; font-weight: 600; letter-spacing: 2px; text-transform: capitalize;color: var(--call) !important; margin-bottom: 16px;}.footer-col ul { list-style: none;    border-bottom: 1px solid rgba(255, 255, 255, 0.08);padding-bottom: 53px; margin-bottom: 53px;     margin-left: 0 !important;}.footer-col ul li { margin-bottom: 25px; }.footer-col ul li a {font-size: 13px; color: rgba(255,255,255,0.5); text-decoration: none;transition: color 0.2s;}.footer-col ul li a { color: #e4c97c; }.footer-bottom {padding-top: 28px; display: flex;gap: 16px;flex-direction: column;}.footer-copy { font-size: 12px; color: white !important; }.footer-disclaimer { font-size: 11px; color: #DBE1FB; max-width: 640px; line-height: 16px; }.footer-socials, .footer-links-text ul {display: flex;flex-direction: row;list-style: none;margin: 0;gap: 35px;}.footer-links-text a{font-size: 12px;color: white;line-height: 1.7;text-decoration: none;
+
+}.upper-ft{padding-bottom: 20px;border-bottom: 1px solid rgba(255, 255, 255, 0.08);}.upper-ft, .lower-ft{display: flex; flex-direction: row; gap: 200px; align-items: center;}
+
+/* ─── ANIMATIONS ─── */@keyframes fadeUp {from { opacity: 0; transform: translateY(20px); }to   { opacity: 1; transform: translateY(0); }}.hero-inner { animation: fadeUp 0.7s ease both; }.tort-card { animation: fadeUp 0.4s ease both; }
+
+/* ─── MOBILE MENU ─── */.hamburger {display: none;flex-direction: column; justify-content: center; gap: 5px;width: 40px; height: 40px; cursor: pointer;background: none !important; border: none; padding: 4px;}.hamburger span {display: block; width: 24px; height: 2px;background: white !important; border-radius: 2px;transition: all 0.3s ease; transform-origin: center;}.hamburger {     box-shadow: none !important;-webkit-box-shadow: none !important; }.hamburger.open span(1) { transform: translateY(7px) rotate(45deg); }.hamburger.open span(2) { opacity: 0; transform: scaleX(0); }.hamburger.open span(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.mobile-menu {display: none;position: fixed; top: 0; left: 0; right: 0; bottom: 0;background: var(--navy-2); z-index: 999;flex-direction: column; overflow-y: auto;padding: 0;}.mobile-menu.open { display: flex; }.mobile-menu-header {display: flex; align-items: center; justify-content: space-between;padding: 18px 0px; border-bottom: 1px solid rgba(255,255,255,0.1);position: sticky; top: 0; background: var(--navy-2); z-index: 10;}.mobile-menu-logo {font-family: 'Cormorant Garamond', serif;font-size: 24px; font-weight: 700; color: var(--white);}.mobile-close {background: none !important; border: none; cursor: pointer;font-size: 28px; color: var(--white) !important; line-height: 1; padding: 4px;}.mobile-close {   box-shadow: none !important;-webkit-box-shadow: none !important; }.mobile-menu-body { padding: 16px 0 40px; flex: 1; }.mobile-nav-link {display: block; padding: 16px 24px;font-size: 16px; font-weight: 700; color: rgba(255,255,255,0.85) !important;text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.07);transition: background 0.15s;}.mobile-nav-link { background: rgba(255,255,255,0.05); color: var(--white); }.mobile-section-title {font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;color: var(--gold); padding: 20px 24px 8px;}.mobile-tort-link {display: block; padding: 11px 24px 11px 36px;font-size: 14px; color: white;font-weight: 300;text-decoration: none; border-bottom: 1px solid rgba(255,255,255,0.04);transition: background 0.15s;}
+
+.mobile-tort-link { background: rgba(255,255,255,0.05); color: var(--white); }.mobile-cta-wrap {padding: 20px 24px; display: flex; flex-direction: column; gap: 12px;border-top: 1px solid rgba(255,255,255,0.1); margin-top: 8px;}.mobile-cta-call {display: flex; align-items: center; justify-content: center; gap: 10px;background: var(--call); color: var(--white);font-weight: 700; font-size: 16px; letter-spacing: 0.5px;padding: 16px; border-radius: 3px; text-decoration: none;}.mobile-cta-eval {display: flex; align-items: center; justify-content: center;background: transparent; color: var(--white);font-weight: 500; font-size: 14px;padding: 14px; border-radius: 3px; text-decoration: none;border: 1px solid rgba(255,255,255,0.25);}.form-submit-new{border-radius: 5px !important;}/* ─── RESPONSIVE ─── */@media (max-width: 900px) {.mobile-menu-header{padding: 0px 20px !important;}.form-submit-new{border-radius: 5px !important;}.form-submit{width: 100%;
+
+}nav { padding: 0 20px; }.nav-links { display: none; }.hamburger { display: flex; }.hero { padding: 60px 24px; }.hero-inner { grid-template-columns: 1fr; gap: 48px; }.about-grid { grid-template-columns: 1fr; }.div-grid { grid-template-columns: 1fr; }.tort-card.tort-featured { grid-column: span 1; grid-template-columns: 1fr; }.contact-grid { grid-template-columns: 1fr; }.footer-top { grid-template-columns: 1fr; }.section { padding: 60px 24px; }.stats-bar { flex-direction: column; border-radius: 10px;}.loc-offices { grid-template-columns: 1fr; }.tort-tabs { gap: 4px; }.tort-tab { font-size: 11px; padding: 8px 12px; }.nav-dropdown-menu { display: none !important; }.stat-item{border-right: none;}.mobile-cta-wrap a{color: white;
+
+}footer {
+
+      padding: 60px 24px;
+
+}
+
+.footer-col ul{padding-bottom: 0;}
+
+.footer-top {
+  gap:50px;
+flex-direction: column;}
+.upper-ft, .lower-ft {
+        gap: 25px;
+flex-direction: column;}
+.footer-disclaimer{
+  text-align: center;
+}
+
+}.nav-item-dropdown {position: relative;}
+
+.nav-toggle {background: none;border: none;cursor: pointer;font: inherit;}
+
+.dropdown-menu {display: none;position: absolute;top: 100%;left: 0;padding: 10px;min-width: 250px;}
+
+.nav-item-dropdown.active .dropdown-menu {display: block;}
+
+/* Mobile behavior /@media (max-width: 768px) {.dropdown-menu {position: static;}}.nav-item button{color: white;}.nav-item button{color: white;}/ Tablet */@media (min-width: 900px) and (max-width: 1280px) {.upper-ft{gap: 0;justify-content: space-between;
+
+}
+
+.lower-ft {gap: 100px;}}</style>
+
+</head>
+<body id="artifacts-component-root-html">
+
+
+
+<!-- NAV -->
+
+<nav>
+  <div class="nav-logo">
+     <a href="https://www.glmasstorts.com/"><img src="https://revenuecyclstg.wpengine.com/wp-content/uploads/2026/04/GL_LOGOMonogram-1.png" class="nav-logo-main" /> </a>
+  </div>
+  <div class="nav-links">
+
+<div class="header-links">
+   <a href="https://www.glmasstorts.com/">Home</a>
+    <div class="nav-dropdown">
+      <a href="#formsection" class="nav-dropdown-trigger">Start Here ▾</a>
+      <div class="nav-dropdown-menu">
+        <div class="dropdown-col">
+          <div class="dropdown-col-title">💊 Pharmaceutical Drugs</div>
+          <a href="#torts" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0])">GLP-1 / Ozempic Litigation</a>
+          <a href="#torts" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0])">Depo-Provera Brain Tumor</a>
+          <a href="#torts" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0])">J&amp;J Talcum Powder</a>
+          <a href="#torts" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0])">Suboxone Tooth Decay</a>
+          <a href="#torts" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0])">Taxotere Hair &amp; Vision Loss</a>
+          <a href="#torts" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0])">View All 10 Drug Cases →</a>
+        </div>
+        <div class="dropdown-col">
+          <div class="dropdown-col-title">🔬 Medical Devices</div>
+          <a href="#torts" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1])">Hernia Mesh</a>
+          <a href="#torts" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1])">Bard PowerPort</a>
+          <a href="#torts" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1])">Philips CPAP Recall</a>
+          <a href="#torts" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1])">Paragard IUD</a>
+          <a href="#torts" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1])">Transvaginal Mesh</a>
+          <a href="#torts" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1])">View All 11 Device Cases →</a>
+        </div>
+        <div class="dropdown-col">
+          <div class="dropdown-col-title">☣️ Toxic &amp; Environmental</div>
+          <a href="#torts" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2])">AFFF / PFAS Foam</a>
+          <a href="#torts" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2])">Roundup Cancer</a>
+          <a href="#torts" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2])">Paraquat Parkinson's</a>
+          <a href="#torts" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2])">Camp Lejeune Water</a>
+          <a href="#torts" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2])">Hair Relaxer Cancer</a>
+          <a href="#torts" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2])">View All 6 Toxic Cases →</a>
+        </div>
+        <div class="dropdown-col">
+          <div class="dropdown-col-title">🔒 Assault &amp; 📱 Tech</div>
+          <a href="#torts" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4])">Uber Sexual Assault</a>
+          <a href="#torts" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4])">Roblox Child Abuse</a>
+          <a href="#torts" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4])">Sex Trafficking — Hotels</a>
+          <a href="#torts" onclick="showTab('tech',document.querySelectorAll('.tort-tab')[5])">Social Media Addiction</a>
+          <a href="#torts" onclick="showTab('tech',document.querySelectorAll('.tort-tab')[5])">Video Game Addiction</a>
+          <a href="#torts" onclick="showTab('product',document.querySelectorAll('.tort-tab')[3])">View All 35+ Cases →</a>
+        </div>
+      </div>
+    </div>
+    <a href="#about">About Us</a>
+
+<a href="https://www.glmasstorts.com/contact-us/">Contact</a>
+<div class="nav-dropdown">
+  <a class="nav-dropdown-trigger">Divisions ▾</a>
+  <div class="nav-dropdown-menu-divisions">
+    <div class="dropdown-col">
+      <a href="https://www.gedlawyers.com/">Personal Injury & Catastrophic Loss</a>
+      <a href="https://www.glmasstorts.com/">Mass Torts & Class Actions</a>
+      <a href="https://www.revenuecycleattorneys.com/" class="custom-link">Healthcare Revenue Cycle Recovery</a>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- <img class="header-logo" src="https://img.icons8.com/?size=100&id=7695&format=png&color=201e6b"/> -->
+
+<a href="tel:8444433529" class="nav-cta"><i class="fa fa-phone nav-icon-btn"></i>   844-443-3529</a>
+
+  </div>
+  <button class="hamburger" id="hamburger" onclick="toggleMenu()" aria-label="Open menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<!-- ════════ MOBILE MENU ════════ -->
+
+<div class="mobile-menu" id="mobileMenu">
+  <div class="mobile-menu-header">
+     <div class="nav-logo">
+    <a href="https://www.glmasstorts.com/"><img src="https://revenuecyclstg.wpengine.com/wp-content/uploads/2026/04/GL_LOGOMonogram-1.png" class="nav-logo-main" /> </a>
+  </div>
+    <button class="mobile-close" onclick="toggleMenu()" aria-label="Close menu">✕</button>
+  </div>
+  <div class="mobile-menu-body">
+    <a href="#home" class="mobile-nav-link" onclick="toggleMenu()">Home</a>
+
+
+
+<div class="nav-item nav-item-dropdown">
+
+  <button style="background: none; font-weight: 700;" class="mobile-nav-link nav-toggle">
+    Start Here
+  </button>
+
+
+
+</div>
+
+<div class="nav-item nav-item-dropdown">
+  <button style="background: none; font-weight: 700;" class="mobile-nav-link nav-toggle">
+    💊 Pharmaceutical Drugs <span class="caret">▾</span>
+  </button>
+
+  <div class="dropdown-menu">
+    <div class="dropdown-column">
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">J&amp;J Talcum Powder</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">GLP-1 / Ozempic — Gastroparesis</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">GLP-1 / Ozempic — Vision Loss</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">Depo-Provera Brain Tumor</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">Suboxone Tooth Decay</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">Proton Pump Inhibitor (PPI)</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">Taxotere Hair &amp; Vision Loss</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">Tylenol / Acetaminophen</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">JUUL / Vaping</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('pharma',document.querySelectorAll('.tort-tab')[0]);toggleMenu()">Tepezza Hearing Loss</a>
+    </div>
+  </div>
+</div>
+
+<div class="nav-item nav-item-dropdown">
+  <button style="background: none; font-weight: 700;" class="mobile-nav-link nav-toggle">
+    🔬 Medical Devices <span class="caret">▾</span>
+  </button>
+
+  <div class="dropdown-menu">
+    <div class="dropdown-column">
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Hernia Mesh</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Bard PowerPort</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Philips CPAP Recall</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Paragard IUD</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Cook IVC Filter</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Transvaginal Mesh</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Bair Hugger Warming Device</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">AngioDynamics Port Catheter</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Allergan Breast Implant</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('device',document.querySelectorAll('.tort-tab')[1]);toggleMenu()">Stryker Hip Implant</a>
+    </div>
+  </div>
+</div>
+
+<div class="nav-item nav-item-dropdown">
+  <button style="background: none;  font-weight: 700;" class="mobile-nav-link nav-toggle">
+    ☣️ Toxic Exposure <span class="caret">▾</span>
+  </button>
+
+  <div class="dropdown-menu">
+    <div class="dropdown-column">
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2]);toggleMenu()">AFFF / PFAS Firefighting Foam</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2]);toggleMenu()">Roundup Cancer</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2]);toggleMenu()">Paraquat Parkinson's</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2]);toggleMenu()">Camp Lejeune Water</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2]);toggleMenu()">Hair Relaxer Cancer</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('toxic',document.querySelectorAll('.tort-tab')[2]);toggleMenu()">Mesothelioma / Asbestos</a>
+    </div>
+  </div>
+</div>
+
+<div class="nav-item nav-item-dropdown">
+  <button style="background: none;  font-weight: 700;" class="mobile-nav-link nav-toggle">
+    🏭 Consumer Products <span class="caret">▾</span>
+  </button>
+
+  <div class="dropdown-menu">
+    <div class="dropdown-column">
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('product',document.querySelectorAll('.tort-tab')[3]);toggleMenu()">Baby Food Heavy Metals</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('product',document.querySelectorAll('.tort-tab')[3]);toggleMenu()">NEC Baby Formula</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('product',document.querySelectorAll('.tort-tab')[3]);toggleMenu()">Weber Grill Brush</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('product',document.querySelectorAll('.tort-tab')[3]);toggleMenu()">Stumptown Coffee</a>
+    </div>
+  </div>
+</div>
+
+<div class="nav-item nav-item-dropdown">
+  <button style="background: none;  font-weight: 700;" class="mobile-nav-link nav-toggle">
+    🔒 Sexual Assault &amp; Abuse <span class="caret">▾</span>
+  </button>
+
+  <div class="dropdown-menu">
+    <div class="dropdown-column">
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4]);toggleMenu()">Uber Sexual Assault</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4]);toggleMenu()">Lyft Sexual Assault</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4]);toggleMenu()">Wyndham Hotels Sex Trafficking</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4]);toggleMenu()">Roblox Child Abuse</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('abuse',document.querySelectorAll('.tort-tab')[4]);toggleMenu()">LDS Church Abuse</a>
+    </div>
+  </div>
+</div>
+
+<div class="nav-item nav-item-dropdown">
+  <button style="background: none;  font-weight: 700;" class="mobile-nav-link nav-toggle">
+    📱 Technology &amp; Emerging <span class="caret">▾</span>
+  </button>
+
+  <div class="dropdown-menu">
+    <div class="dropdown-column">
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('tech',document.querySelectorAll('.tort-tab')[5]);toggleMenu()">Social Media Addiction</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('tech',document.querySelectorAll('.tort-tab')[5]);toggleMenu()">Video Game Addiction</a>
+      <a href="#torts" class="mobile-tort-link" onclick="showTab('tech',document.querySelectorAll('.tort-tab')[5]);toggleMenu()">Ultra-Processed Food</a>
+    </div>
+  </div>
+</div>
+
+ <a href="#about" class="mobile-nav-link" onclick="toggleMenu()">About Us</a>
+<a href="https://www.glmasstorts.com//contact-us/" class="mobile-nav-link">Contact</a>
+
+<!-- dropdownnnnnnnnnnnnnnn -->
+
+ <div class="nav-item nav-item-dropdown" style="border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+  <button style="background: none; font-weight: 700;" class="mobile-nav-link nav-toggle">
+    Divisions <span class="caret">▾</span>
+  </button>
+
+  <div class="dropdown-menu">
+    <div class="dropdown-column">
+      <a href="https://www.gedlawyers.com/" class="mobile-tort-link">Personal Injury & Catastrophic Loss</a>
+      <a href="https://www.glmasstorts.com/" class="mobile-tort-link">Mass Torts & Class Actions</a>
+      <a href="https://www.revenuecycleattorneys.com/" class="mobile-tort-link">Healthcare Revenue Cycle Recovery</a>
+    </div>
+  </div>
+</div>
+
+
+
+<div class="mobile-cta-wrap">
+  <a href="tel:8444433529" class="mobile-cta-call"><i class="fa fa-phone nav-icon-btn"></i>Call 844-443-3529</a>
+  <a href="#contact" class="mobile-cta-eval" onclick="toggleMenu()">Free Case Evaluation →</a>
+</div>
+
+  </div>
+</div>
+
+<!-- ════════ HERO ════════ -->
+
+<section class="hero" id="home">
+  <div class="hero-rule"></div>
+  <div class="hero-inner">
+    <div>
+      <div class="hero-eyebrow">Mass Torts &amp; Class Actions</div>
+      <h1>Your Case.<br><em>Our Fight.</em><br>Maximum Recovery.</h1>
+      <p class="hero-lead">Ged Lawyers represents victims of dangerous drugs, defective medical devices, and corporate negligence nationwide. With offices across Florida, Massachusetts, New Jersey, and Michigan — we are ready to fight for you.</p>
+      <div class="hero-actions">
+        <a href="tel:8444433529" class="btn-primary"><i class="fa fa-phone nav-icon-btn"></i>Call 844-443-3529</a>
+        <a href="#contact" class="btn-outline">Free Case Evaluation →</a>
+      </div>
+    </div>
+
+<!-- HERO FORM -->
+
+  <div class="hero-card" id="formsection">
+  <h3>Were You or a Loved One Harmed?</h3>
+  <p>Free, confidential evaluation — no obligation.</p>
+
+  <form method="POST" action="/wp-admin/admin-post.php">
+
+<input type="hidden" name="action" value="hero_case_form">
+
+<div class="form-group">
+  <label>Full Name *</label>
+  <input required type="text" name="fullname" placeholder="Your full name">
+</div>
+
+<div class="form-group">
+  <label>Phone Number *</label>
+  <input required type="tel" name="phone" placeholder="(___) ___-____">
+</div>
+
+<div class="form-group">
+  <label>Email Address *</label>
+  <input required type="email" name="email" placeholder="your@email.com">
+</div>
+
+<div class="form-group">
+  <label>Brief Description about case</label>
+  <textarea class="custom-message-field" name="message" placeholder="Briefly describe what happened..."></textarea>
+</div>
+
+<button class="form-submit" style="width:100%">
+  Submit Free Case Review
+</button>
+
+  </form>
+
+  <p class="form-disclaimer">
+    Attorney-client privilege applies. Confidential & free. No obligation.
+  </p>
+</div>
+
+  </div>
+
+  <!-- STATS BAR — inside hero, anchored to bottom -->
+
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-text"><span class="stat-num">35+</span><span class="stat-lbl">Active Mass Torts</span></div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-text"><span class="stat-num">198K+</span><span class="stat-lbl">MDL Cases Nationwide</span></div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-text"><span class="stat-num">All 50</span><span class="stat-lbl">States Represented</span></div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-text"><span class="stat-num">$0</span><span class="stat-lbl">Upfront to You</span></div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-text"><span class="stat-num">24/7</span><span class="stat-lbl">Free Consultations</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ ABOUT ════════ -->
+
+<section class="section about">
+  <div class="section-inner">
+    <div class="about-grid">
+      <div class="about-text">
+        <span class="section-tag">About Ged Lawyers</span>
+        <h2 class="section-title">Relentless Advocacy for<br><em>Injured Victims</em></h2>
+        <p>Ged Lawyers is a nationally recognized plaintiff litigation firm with decades of experience holding corporations, pharmaceutical manufacturers, and negligent entities accountable for the harm they cause to individuals and families.</p>
+        <p>Our Mass Torts and Class Actions division — operating at GLMasstorts.com — specializes exclusively in large-scale product liability and pharmaceutical injury cases. We combine the resources of a national firm with the personal attention of a boutique practice.</p>
+        <p>There are no upfront costs or fees. We only get paid when you win.</p>
+        <div class="about-highlights">
+          <div class="highlight-box">
+            <div class="highlight-icon">⚖️</div>
+            <div class="highlight-label">No Fee Unless We Win</div>
+            <div class="highlight-sub">100% contingency representation</div>
+          </div>
+          <div class="highlight-box">
+            <div class="highlight-icon">🏛️</div>
+            <div class="highlight-label">Nationwide Representation</div>
+            <div class="highlight-sub">Licensed across multiple states</div>
+          </div>
+          <div class="highlight-box">
+            <div class="highlight-icon">🔍</div>
+            <div class="highlight-label">Free Case Evaluation</div>
+            <div class="highlight-sub">Confidential, no obligation</div>
+          </div>
+          <div class="highlight-box">
+            <div class="highlight-icon">📋</div>
+            <div class="highlight-label">35+ Active Mass Torts</div>
+            <div class="highlight-sub">All major MDLs covered</div>
+          </div>
+        </div>
+      </div>
+      <div class="about-right">
+        <span class="section-tag">Why Clients Choose Us</span>
+        <ul class="verdict-list">
+          <li class="verdict-item">
+            <div class="verdict-amount">$11B+</div>
+            <div class="verdict-info">
+              <div class="verdict-case">Roundup / Glyphosate MDL</div>
+              <div class="verdict-type">Total settlements secured industry-wide for cancer victims</div>
+            </div>
+          </li>
+          <li class="verdict-item">
+            <div class="verdict-amount">$1.1B</div>
+            <div class="verdict-info">
+              <div class="verdict-case">Philips CPAP Recall</div>
+              <div class="verdict-type">Settlement secured for device injury victims</div>
+            </div>
+          </li>
+          <li class="verdict-item">
+            <div class="verdict-amount">$530M+</div>
+            <div class="verdict-info">
+              <div class="verdict-case">Camp Lejeune Water Contamination</div>
+              <div class="verdict-type">Paid to date with 409,000+ claims still pending</div>
+            </div>
+          </li>
+          <li class="verdict-item">
+            <div class="verdict-amount">198K+</div>
+            <div class="verdict-info">
+              <div class="verdict-case">Active MDL Pendants Nationwide</div>
+              <div class="verdict-type">Across 158 active multidistrict litigations as of Q1 2026</div>
+            </div>
+          </li>
+        </ul>
+        <p class="about-disclaimer">* Results shown represent national MDL litigation outcomes and industry settlements. Past results do not guarantee future results. Individual recoveries vary.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ DIVISIONS ════════ -->
+
+<section class="section divisions" id="about">
+  <div class="section-inner">
+    <span class="section-tag">Ged Lawyers Divisions</span>
+    <h2 class="section-title">Three Divisions.<br><em>One Mission.</em></h2>
+    <div class="div-grid">
+      <div class="div-card">
+        <div class="div-num">01</div>
+        <div class="div-icon">🏥</div>
+        <div class="div-title">Healthcare Revenue Cycle Recovery</div>
+        <div class="div-desc">Healthcare reimbursement and insurance recovery representation. Our team navigates the complexities of medical billing disputes, insurance denials, and revenue cycle challenges for healthcare providers and patients alike.</div>
+        <a href="https://www.revenuecycleattorneys.com/" class="div-link">Learn More</a>
+      </div>
+      <div class="div-card">
+        <div class="div-num">02</div>
+        <div class="div-icon">⚖️</div>
+        <div class="div-title">Personal Injury &amp; Catastrophic Loss</div>
+        <div class="div-desc">Serious injury and wrongful death representation. When you or a loved one has suffered life-altering harm due to another's negligence, our trial attorneys pursue maximum compensation without compromise.</div>
+        <a href="https://www.gedlawyers.com/" class="div-link">Learn More</a>
+      </div>
+      <div class="div-card" style="border: 2px solid var(--border);">
+        <div class="div-num">03</div>
+        <div class="div-icon">📋</div>
+        <div class="div-title">Mass Torts &amp; Class Actions</div>
+        <div class="div-desc">Large-scale product and pharmaceutical liability cases. Operating at GLMasstorts.com, our dedicated mass tort team handles all 35+ active MDLs — from dangerous drugs and defective devices to toxic exposures and institutional abuse.</div>
+        <a href="https://www.glmasstorts.com/" class="div-link">See All Mass Torts</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════ MASS TORTS ════════ -->
+
+<section class="section mass-torts" id="torts">
+  <div class="section-inner">
+    <div class="torts-header">
+      <div>
+        <span class="section-tag" id="review-form">Active Litigation</span>
+        <h2 class="section-title">35+ Active<br><em>Mass Tort Cases</em></h2>
+      </div>
+      <div class="torts-header-right">
+        <div class="torts-count">35</div>
+      </div>
+    </div>
+
+<!-- TABS -->
+<div class="tort-tabs">
+  <button class="tort-tab active" onclick="showTab('pharma', this)">💊 Pharmaceutical Drugs</button>
+  <button class="tort-tab" onclick="showTab('device', this)">🔬 Medical Devices</button>
+  <button class="tort-tab" onclick="showTab('toxic', this)">☣️ Toxic Exposure</button>
+  <button class="tort-tab" onclick="showTab('product', this)">🏭 Consumer Products</button>
+  <button class="tort-tab" onclick="showTab('abuse', this)">🔒 Sexual Assault &amp; Abuse</button>
+  <button class="tort-tab" onclick="showTab('tech', this)">📱 Technology &amp; Emerging</button>
+</div>
+
+<!-- ── PHARMA ── -->
+<div class="tort-section active" id="tab-pharma">
+  <div class="cat-header">
+    <span class="cat-title">Pharmaceutical Drug Litigation</span>
+    <span class="cat-count">10 Active Cases</span>
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card tort-featured">
+      <div>
+        <div class="tort-status-row">
+          <span class="tort-pill pill-pharma">Pharmaceutical · #1 Largest MDL</span>
+          <span class="status-badge status-settling"><span class="status-dot"></span>Settling</span>
+        </div>
+        <h4>Johnson &amp; Johnson Talcum Powder Litigation</h4>
+        <p>For decades, J&amp;J sold talcum powder alleged to contain asbestos — causing ovarian cancer and mesothelioma in thousands. Despite bankruptcy strategies, state and federal trials continue to advance in 2026. If you used talcum powder products and developed cancer, you may still have an active claim.</p>
+        <div class="tort-footer">
+          <span class="tort-mdl">MDL #2738 · Largest Active Mass Tort in the U.S.</span>
+          <span class="settlement-badge">Est. $300K–$5M+ per case</span>
+        </div>
+      </div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">67,100+</span>
+        <span class="feat-stat-lbl">Pending cases as of Q1 2026</span>
+      </div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Filing Now</span>
+      </div>
+      <h4>GLP-1 / Ozempic &amp; Mounjaro — Gastroparesis</h4>
+      <p>Patients prescribed Ozempic, Wegovy, Mounjaro, and similar GLP-1 drugs have developed gastroparesis — a severe, potentially permanent stomach-paralysis condition. Manufacturers allegedly downplayed this risk and failed to warn millions of patients.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3094 · 3,191+ cases · 130% YoY growth</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Emerging</span>
+      </div>
+      <h4>GLP-1 / Ozempic &amp; Mounjaro — Vision Loss (NAION)</h4>
+      <p>Some GLP-1 drug patients developed non-arteritic anterior ischemic optic neuropathy (NAION), causing sudden and irreversible blindness. Plaintiffs allege manufacturers concealed this serious risk while aggressively marketing the drugs.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging MDL · New filings daily in 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Fast Growing</span>
+      </div>
+      <h4>Depo-Provera Brain Tumor Litigation</h4>
+      <p>Women who used the Depo-Provera birth control injection have filed lawsuits alleging it caused intracranial meningioma brain tumors. Pfizer and affiliates are accused of concealing this serious risk from patients and physicians for years.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3140 · 2,100+ cases · Rapidly growing</span><span class="settlement-badge">Est. $75K–$1M+ projected</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Filing Now</span>
+      </div>
+      <h4>Suboxone Tooth Decay Litigation</h4>
+      <p>Suboxone sublingual films, prescribed for opioid addiction, cause severe dry mouth, tooth decay, and tooth loss. Manufacturers knew for years but withheld warnings — only adding them after FDA intervention. Thousands of dental injury claims are now pending.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · Thousands of pending claims</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Mature MDL</span>
+      </div>
+      <h4>Proton Pump Inhibitor (PPI) Kidney Injury</h4>
+      <p>Common heartburn medications — Nexium, Prilosec, Prevacid, Protonix — have been linked to chronic kidney disease and kidney failure. Manufacturers allegedly knew and failed to warn millions of daily users about this serious risk.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #2789 · 11,300+ pending cases</span><span class="settlement-badge">Pre-Settlement · Still Filing</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Ongoing</span>
+      </div>
+      <h4>Taxotere Permanent Hair Loss &amp; Vision</h4>
+      <p>The chemotherapy drug Taxotere has been linked to permanent alopecia and serious vision damage. Unlike other chemo drugs, Taxotere causes permanent hair loss — a risk manufacturer Sanofi is alleged to have known about and concealed from patients.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · 15,000+ total cases filed</span><span class="settlement-badge">Pre-Settlement · Still Filing</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-appellate"><span class="status-dot"></span>Appellate Revival</span>
+      </div>
+      <h4>Tylenol (Acetaminophen) Autism &amp; ADHD</h4>
+      <p>Lawsuits allege prenatal acetaminophen exposure is linked to autism spectrum disorder and ADHD in children. After dismissal in 2024, the Second Circuit signaled in late 2025 it may revive the litigation — making 2026 a pivotal year for these claims.</p>
+      <div class="tort-footer"><span class="tort-mdl">Appellate review pending · 2nd Circuit 2025–2026</span><span class="settlement-badge">2026 Key Decision Year</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Ongoing Trials</span>
+      </div>
+      <h4>JUUL / E-Cigarette Vaping Litigation</h4>
+      <p>JUUL and other e-cigarette makers allegedly marketed highly addictive products directly to teenagers, concealing nicotine dependency and lung injury risks. The litigation echoes landmark tobacco cases in scope, targeting deliberate youth marketing strategies.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · Ongoing trials nationwide</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-pharma">Pharmaceutical</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Growing</span>
+      </div>
+      <h4>Tepezza Hearing Loss &amp; Tinnitus</h4>
+      <p>Tepezza, an FDA-approved infusion drug for thyroid eye disease, has been linked to permanent hearing loss and tinnitus. Manufacturer Horizon Therapeutics is accused of failing to warn patients about these serious, irreversible auditory side effects.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · Growing docket</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card tort-coming-soon">
+
+       <span class="btn-primary">More Torts Coming Soon!</span>
+    </a>
+  </div>
+</div>
+
+<!-- ── DEVICES ── -->
+<div class="tort-section" id="tab-device">
+  <div class="cat-header">
+    <span class="cat-title">Defective Medical Device Litigation</span>
+    <span class="cat-count">11 Active Cases</span>
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card tort-featured">
+      <div>
+        <div class="tort-status-row">
+          <span class="tort-pill pill-device">Medical Device · #2 Largest MDL</span>
+          <span class="status-badge status-settling"><span class="status-dot"></span>Settling · $1B+ Fund</span>
+        </div>
+        <h4>Hernia Mesh Litigation</h4>
+        <p>Hundreds of thousands of patients who received polypropylene hernia mesh implants report chronic pain, mesh migration, organ perforation, infection, and the need for multiple revision surgeries. Bard/Davol reached a $1B+ settlement — but claims are still being filed and paid out through 2026.</p>
+        <div class="tort-footer"><span class="tort-mdl">MDL #2846 · 23,600+ pending cases</span><span class="settlement-badge">Avg. $60K–$100K · High cases to $1M+</span></div>
+      </div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">$1B+</span>
+        <span class="feat-stat-lbl">Bard settlement fund · Payments ongoing through 2026</span>
+      </div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Bellwether 2026</span>
+      </div>
+      <h4>Bard PowerPort Implant Litigation</h4>
+      <p>Design flaws in Bard PowerPort catheter devices cause the tubing to fracture or migrate, leading to vascular damage, infection, and life-threatening complications. Bellwether trials are now underway in 2026, making early filing critical.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3081 · Bellwether trials actively underway</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-settling"><span class="status-dot"></span>Partially Settled</span>
+      </div>
+      <h4>Philips CPAP / BiPAP Recall Litigation</h4>
+      <p>Millions of Philips breathing devices were recalled after sound-abatement foam was found to release harmful particles into the airflow. Philips reached a $1.1B settlement for less severe injuries; severe cancer and pulmonary cases remain actively litigated.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · $1.1B settlement · Severe claims still open</span><span class="settlement-badge">$7.5K–$100K+ · Severe cases higher</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Bellwether 2026</span>
+      </div>
+      <h4>Paragard IUD Litigation</h4>
+      <p>The Paragard copper IUD breaks during removal, leaving embedded pieces that cause organ damage, chronic pain, infertility, and often require hysterectomy. Bellwether trials are actively underway in 2026 — now is the time to file.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #2974 · 3,900+ cases · Bellwether trials 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Mature MDL</span>
+      </div>
+      <h4>Cook Medical IVC Filter Litigation</h4>
+      <p>IVC filters implanted to catch blood clots have fractured, migrated, and perforated surrounding organs in thousands of patients. Cook Medical and C.R. Bard face claims that the devices were defectively designed and risks were not disclosed.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #2570 · 6,750+ pending cases as of March 2026</span><span class="settlement-badge">Est. $100K–$500K per case</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-settling"><span class="status-dot"></span>Mostly Settled · New Cases</span>
+      </div>
+      <h4>Transvaginal / Pelvic Mesh Litigation</h4>
+      <p>Women implanted with transvaginal mesh suffered devastating complications — mesh erosion, organ perforation, chronic pain — requiring repeated surgeries. Major MDLs have largely settled but new state court cases continue, often yielding higher individual payouts.</p>
+      <div class="tort-footer"><span class="tort-mdl">100,000+ lawsuits filed · State courts still active</span><span class="settlement-badge">Verdicts $25M–$120M+ · Avg. $40K–$150K</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Mature MDL</span>
+      </div>
+      <h4>Bair Hugger Warming Device Litigation</h4>
+      <p>3M's Bair Hugger surgical warming blanket allegedly circulated contaminated air near open wounds during surgery, causing deep joint infections, sepsis, and the need for additional operations. 3M is accused of concealing the contamination risk.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #2666 · 8,500+ pending cases</span><span class="settlement-badge">Pre-Settlement · Still Filing</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Filing Now</span>
+      </div>
+      <h4>AngioDynamics / Navilyst Port Catheter</h4>
+      <p>SmartPort, Xcela, BioFlo, and Vortex port catheters have caused severe infections, sepsis, blood clots, and device fractures in patients. Lawsuits allege defective design caused progressive degradation that created life-threatening complications over time.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · New filings daily in 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-emerging"><span class="status-dot"></span>Emerging · Filing Now</span>
+      </div>
+      <h4>ICU Medical Port-A-Cath II Litigation</h4>
+      <p>ICU Medical's Port-A-Cath II implantable vascular access device is alleged to suffer progressive surface degradation, dramatically increasing risks of bacterial infection, thrombosis, and device fracture — requiring removal and additional surgeries.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · New filings 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Ongoing</span>
+      </div>
+      <h4>Allergan Biocell Breast Implant Litigation</h4>
+      <p>Women with Allergan's recalled Biocell textured breast implants have been diagnosed with BIA-ALCL, a rare cancer linked specifically to these devices. Allergan recalled the implants in 2019, but lawsuits allege the company knew the cancer risk for years before acting.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · Recall 2019 · Ongoing litigation</span><span class="settlement-badge">Pre-Settlement · Still Filing</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Ongoing</span>
+      </div>
+      <h4>Stryker Hip Implant Litigation</h4>
+      <p>Stryker hip implant systems have caused persistent pain, metal toxicity, corrosion, device loosening, and the need for emergency revision surgery. Lawsuits allege defective design and concealment of known failure risks from patients and surgeons.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active litigation · Multiple state &amp; federal courts</span><span class="settlement-badge">Est. $200K–$1M+ per case</span></div>
+    </a>
+  </div>
+</div>
+
+<!-- ── TOXIC ── -->
+<div class="tort-section" id="tab-toxic">
+  <div class="cat-header">
+    <span class="cat-title">Toxic Exposure &amp; Environmental Litigation</span>
+    <span class="cat-count">6 Active Cases</span>
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card tort-featured">
+      <div>
+        <div class="tort-status-row">
+          <span class="tort-pill pill-toxic">Toxic Exposure · #3 Largest MDL</span>
+          <span class="status-badge status-active"><span class="status-dot"></span>Active · Settlement Possible 2026</span>
+        </div>
+        <h4>AFFF Firefighting Foam / PFAS Litigation</h4>
+        <p>Firefighters and military personnel were exposed to cancer-causing PFAS "forever chemicals" in AFFF. Manufacturers including 3M and DuPont allegedly concealed the risks for decades. Municipal water system cases have exceeded $12B in settlements; thousands of personal injury claims remain active with a global settlement possible in 2026.</p>
+        <div class="tort-footer"><span class="tort-mdl">MDL #2873 · 15,200+ cases · Global settlement discussions active</span><span class="settlement-badge">Est. $300K–$1M+ projected per case</span></div>
+      </div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">$12B+</span>
+        <span class="feat-stat-lbl">Municipal settlements paid · Personal injury claims active</span>
+      </div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-toxic">Toxic Exposure</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Ongoing Trials</span>
+      </div>
+      <h4>Roundup (Glyphosate) Cancer Litigation</h4>
+      <p>Bayer's Roundup weedkiller has been linked to non-Hodgkin's lymphoma and other cancers. After $11+ billion in settlements, thousands of plaintiffs who opted out continue to pursue claims. New scientific evidence and ongoing trial victories strengthen plaintiff cases in 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #2741 · 4,511 pending · $11B+ paid in settlements</span><span class="settlement-badge">Avg. $75K–$250K per case</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-toxic">Toxic Exposure</span>
+        <span class="status-badge status-settling"><span class="status-dot"></span>MDL Settled · State Cases Active</span>
+      </div>
+      <h4>Paraquat Parkinson's Disease Litigation</h4>
+      <p>The toxic herbicide paraquat — banned in 30+ countries — has been strongly linked to Parkinson's disease. The federal MDL reached a settlement framework in April 2025; however, over 6,400 state court cases in Illinois and elsewhere remain active and are still being filed.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL settled April 2025 · State courts still active</span><span class="settlement-badge">State cases still filing · Terms TBD</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-toxic">Toxic Exposure</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Bellwether 2026</span>
+      </div>
+      <h4>Camp Lejeune Water Contamination</h4>
+      <p>From the 1950s–1987, military families at Camp Lejeune drank water contaminated with trichloroethylene, perchloroethylene, and benzene. The Camp Lejeune Justice Act opened the path to compensation. Over $530M paid; 409,000+ claims remain pending with bellwether trials in 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">409,910+ claims · $530M+ paid · Bellwether trials 2026</span><span class="settlement-badge">Est. $100K–$550K per claim</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-toxic">Toxic Exposure</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Critical Daubert April 2026</span>
+      </div>
+      <h4>Hair Relaxer Cancer Litigation</h4>
+      <p>Chemical hair relaxers containing endocrine-disrupting chemicals have been linked to uterine cancer, ovarian cancer, and endometriosis. Manufacturers L'Oréal, Revlon, and others failed to warn millions of users. Critical Daubert expert hearings in April 2026 will shape the outcome for 10,948+ pending cases.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3060 · 10,948+ cases · Daubert motions April 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-toxic">Toxic Exposure</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Always Active · Time Sensitive</span>
+      </div>
+      <h4>Mesothelioma / Asbestos Litigation</h4>
+      <p>Mesothelioma is an aggressive cancer caused almost exclusively by asbestos exposure. Workers in construction, shipbuilding, manufacturing, and the military who developed mesothelioma may recover from litigation and established asbestos trust funds. These are among the most consistently compensated claims in personal injury law.</p>
+      <div class="tort-footer"><span class="tort-mdl">Ongoing · Asbestos trust funds available · Statutes vary</span><span class="settlement-badge">Avg. $1M–$1.4M per mesothelioma case</span></div>
+    </a>
+          <a href="#contact" class="tort-card tort-coming-soon">
+
+       <span class="btn-primary">More Torts Coming Soon!</span>
+     </a>
+  </div>
+</div>
+
+<!-- ── CONSUMER PRODUCTS ── -->
+<div class="tort-section" id="tab-product">
+  <div class="cat-header">
+    <span class="cat-title">Consumer Product Liability Litigation</span>
+    <span class="cat-count">4 Active Cases</span>
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-product">Consumer Product</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Filing Now</span>
+      </div>
+      <h4>Baby Food Heavy Metals Litigation</h4>
+      <p>Beech-Nut, Gerber, and Walmart-sold baby foods were found to contain dangerous levels of lead, arsenic, and mercury. Manufacturers allegedly knew from internal testing but continued selling without warnings. Children diagnosed with autism or neurological damage may have a valid claim.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active litigation · Growing docket 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-product">Consumer Product</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Bellwether Aug 2026</span>
+      </div>
+      <h4>NEC Baby Formula Litigation</h4>
+      <p>Premature infants fed Abbott (Similac) and Mead Johnson (Enfamil) cow's milk formula have developed necrotizing enterocolitis (NEC), a devastating and often fatal intestinal disease. Manufacturers allegedly failed to warn neonatal hospitals and parents. Bellwether trials begin August 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · 750+ cases · Bellwether trials Aug 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-product">Consumer Product</span>
+        <span class="status-badge status-emerging"><span class="status-dot"></span>Emerging · Filing Now</span>
+      </div>
+      <h4>Weber Grill Brush Litigation</h4>
+      <p>Weber wire-bristle grill brushes have been linked to serious internal injuries when bristles detach and contaminate food. After ingestion, metal shards can lodge in the throat, stomach, or intestines requiring emergency surgery. Weber allegedly knew of the safety hazard but failed to warn consumers.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · New filings in 2026</span><span class="settlement-badge">Pre-Settlement · Emerging</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-product">Consumer Product</span>
+        <span class="status-badge status-emerging"><span class="status-dot"></span>Emerging · New Filing</span>
+      </div>
+      <h4>Stumptown Coffee Packaging Litigation</h4>
+      <p>Alaska Airlines passengers suffered thermal burns when onboard coffee makers using Stumptown packaging exploded mid-flight. Lawsuits allege the packaging was not designed or tested for airline conditions, that prior similar incidents occurred, and that no corrective action was taken before passengers were injured.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · New filings 2026</span><span class="settlement-badge">Pre-Settlement · Emerging</span></div>
+    </a>
+          <a href="#contact" class="tort-card tort-coming-soon">
+
+       <span class="btn-primary">More Torts Coming Soon!</span>
+     </a>
+  </div>
+</div>
+
+<!-- ── ABUSE ── -->
+<div class="tort-section" id="tab-abuse">
+  <div class="cat-header">
+    <span class="cat-title">Sexual Assault &amp; Institutional Abuse Litigation</span>
+    <span class="cat-count">5 Active Cases</span>
+  </div>
+  <div style="background:#fef2f2; border-left:4px solid var(--red); padding:16px 24px; margin-bottom:2px; font-size:13px; color:#7f1d1d; font-weight:500;">
+    ⚠️ <strong>Statutes of limitations vary by state.</strong> Many look-back windows are closing. If you are a survivor of sexual assault or institutional abuse, contact us immediately for a confidential, free consultation.
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card tort-featured">
+      <div>
+        <div class="tort-status-row">
+          <span class="tort-pill pill-abuse">Sexual Assault · First Verdict Feb 2026</span>
+          <span class="status-badge status-active"><span class="status-dot"></span>Active · Trials Underway</span>
+        </div>
+        <h4>Uber Passenger Sexual Assault Litigation</h4>
+        <p>Thousands of passengers — predominantly women — allege sexual assault by Uber drivers during rides. Uber is accused of negligent hiring, inadequate screening, failure to monitor, and misrepresenting safety. The first MDL bellwether trial returned an $8.5 million verdict in February 2026 — per-person settlement values are expected to be substantial.</p>
+        <div class="tort-footer"><span class="tort-mdl">MDL #3084 · $8.5M first verdict Feb 2026</span><span class="settlement-badge">Est. $500K–$1.5M+ projected</span></div>
+      </div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">$8.5M</span>
+        <span class="feat-stat-lbl">First bellwether verdict — February 2026</span>
+      </div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-abuse">Sexual Assault</span>
+        <span class="status-badge status-emerging"><span class="status-dot"></span>Emerging · MDL Expected 2026</span>
+      </div>
+      <h4>Lyft Passenger Sexual Assault Litigation</h4>
+      <p>Paralleling the Uber litigation, Lyft faces a growing wave of lawsuits from passengers who allege sexual assault by drivers. Plaintiffs allege Lyft failed to implement adequate safety screening and ignored known risks. An MDL consolidation is expected by end of 2026 — early filing is advised.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL consolidation expected 2026 · File now</span><span class="settlement-badge">Pre-Settlement · File Early</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-abuse">Sex Trafficking</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Filing Now</span>
+      </div>
+      <h4>Wyndham Hotels Sex Trafficking Litigation</h4>
+      <p>Trafficking victims are suing hotel owners and operators — including properties affiliated with Wyndham — under the federal TVPRA, alleging management knowingly permitted trafficking activity on their premises. Corporate entities that benefit from trafficking face significant civil liability.</p>
+      <div class="tort-footer"><span class="tort-mdl">TVPRA federal claims · Active filings 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-abuse">Child Safety</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · New MDL 2026</span>
+      </div>
+      <h4>Roblox Child Sexual Abuse Litigation</h4>
+      <p>Roblox — a platform marketed to children — allegedly failed to protect minors from predators, enabling grooming, harassment, and exposure to explicit content for millions of children. A new MDL was formed in the Northern District of California in 2026 as cases rapidly escalate.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3166 · New MDL formed 2026 · Rapidly growing</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-abuse">Institutional Abuse</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Look-Back Windows Open</span>
+      </div>
+      <h4>LDS Church Sexual Abuse Litigation</h4>
+      <p>Plaintiffs allege the Church of Jesus Christ of Latter-Day Saints systematically covered up sexual abuse, shielded perpetrators, and discouraged victims from reporting to law enforcement through a confidential internal "helpline." A surge of cases is emerging through state look-back windows in 2026 with MDL consolidation pending in California.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL consolidation pending · Look-back windows open</span><span class="settlement-badge">Pre-Settlement · Windows Closing</span></div>
+    </a>
+  </div>
+</div>
+
+<!-- ── TECH ── -->
+<div class="tort-section" id="tab-tech">
+  <div class="cat-header">
+    <span class="cat-title">Technology &amp; Emerging Litigation</span>
+    <span class="cat-count">4 Active Cases</span>
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card tort-featured">
+      <div>
+        <div class="tort-status-row">
+          <span class="tort-pill pill-tech">Technology · Historic Litigation · Trial Underway</span>
+          <span class="status-badge status-active"><span class="status-dot"></span>Active · Trial Feb 2026</span>
+        </div>
+        <h4>Social Media Adolescent Addiction Litigation</h4>
+        <p>Meta (Instagram), TikTok, Snapchat, and YouTube face the most significant technology mass tort in U.S. history. Tens of thousands of families and 800+ school districts allege these platforms were deliberately engineered to addict children and teenagers, causing depression, eating disorders, self-harm, and suicide. The first bellwether trial — KGM v. Meta &amp; YouTube — began in Los Angeles in February 2026, with Mark Zuckerberg testifying.</p>
+        <div class="tort-footer"><span class="tort-mdl">MDL #3047 · 10,000+ individual cases · 800+ school districts · Trial underway</span><span class="settlement-badge">Pre-Settlement · Bellwether Trial Live</span></div>
+      </div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">10,800+</span>
+        <span class="feat-stat-lbl">Cases filed · First trial began Feb 2026 with Zuckerberg testifying</span>
+      </div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-tech">Technology</span>
+        <span class="status-badge status-active"><span class="status-dot"></span>Active · Multiple Courts</span>
+      </div>
+      <h4>Video Game Addiction Litigation</h4>
+      <p>Epic Games (Fortnite), Activision Blizzard, and Microsoft face lawsuits alleging they used psychological manipulation tactics to addict minors — causing anxiety, depression, and social withdrawal. The JPML declined MDL consolidation, but litigation is advancing in multiple state and federal courts in 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">No MDL · Multiple courts · Growing 2026</span><span class="settlement-badge">Pre-Settlement · Emerging</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-emerging">Emerging</span>
+        <span class="status-badge status-emerging"><span class="status-dot"></span>Early Stage · Developing</span>
+      </div>
+      <h4>Ultra-Processed Food Litigation</h4>
+      <p>Major food manufacturers face emerging lawsuits alleging they knowingly marketed ultra-processed products contributing to diabetes, obesity, and liver disease. Government entities including San Francisco have filed claims. Attorneys are pursuing a roadmap modeled after landmark tobacco and opioid litigation strategies.</p>
+      <div class="tort-footer"><span class="tort-mdl">Early-stage litigation · No MDL yet · Rapidly developing</span><span class="settlement-badge">Early Stage · Watch This Space</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <div class="tort-status-row">
+        <span class="tort-pill pill-device">Medical Device</span>
+        <span class="status-badge status-emerging"><span class="status-dot"></span>Emerging · Filing Now</span>
+      </div>
+      <h4>ALM Ortho Osseointegration Implant</h4>
+      <p>Patients with ALM Ortho osseointegration implants — designed to attach prosthetic limbs to bone — have reported catastrophic implant fractures during normal activity, causing severe injuries requiring emergency revision surgery. Lawsuits allege defective design with inadequate fatigue strength and insufficient warnings.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · New filings 2026</span><span class="settlement-badge">Pre-Settlement · File Now</span></div>
+    </a>
+     </a>
+          <a href="#contact" class="tort-card tort-coming-soon">
+
+       <span class="btn-primary">More Torts Coming Soon!</span>
+     </a>
+  </div>
+</div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">15,200+</span>
+        <span class="feat-stat-lbl-black">Pending injury cases · 99% YoY growth in 2025</span>
+      </div>
+    
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-toxic">Toxic Exposure</span>
+      <h4>Roundup (Glyphosate) Cancer Litigation</h4>
+      <p>Bayer's Roundup weedkiller has been linked to non-Hodgkin's lymphoma and other cancers. After $11+ billion in settlements, thousands of plaintiffs who opted out continue to pursue claims. New scientific evidence strengthens plaintiff cases in 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #2741 · 4,511 pending · $11B+ paid in settlements</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-toxic">Toxic Exposure</span>
+      <h4>Paraquat Parkinson's Disease Litigation</h4>
+      <p>The highly toxic herbicide paraquat — banned in 30+ countries but still used in the U.S. — has been strongly linked to Parkinson's disease. With 6,476 pending cases and global settlement discussions underway, now is a critical time to file a claim.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3004 · 6,476 cases · Settlement framework ongoing</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-toxic">Toxic Exposure</span>
+      <h4>Camp Lejeune Water Contamination</h4>
+      <p>From the 1950s–1987, military families at Camp Lejeune drank water contaminated with trichloroethylene, perchloroethylene, and benzene. The Camp Lejeune Justice Act opened the path to compensation. Over $530M paid; 409,000+ claims remain pending with bellwether trials in 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">409,910+ claims · $530M+ paid · Bellwether trials 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-toxic">Toxic Exposure</span>
+      <h4>Hair Relaxer Cancer Litigation</h4>
+      <p>Chemical hair relaxers containing endocrine-disrupting chemicals have been linked to uterine cancer, ovarian cancer, and endometriosis. Manufacturers L'Oréal, Revlon, and others failed to warn millions of users — disproportionately women of color. Critical Daubert hearings in April 2026 will shape the case.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3060 · 10,948+ cases · Daubert motions April 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-toxic">Toxic Exposure</span>
+      <h4>Mesothelioma / Asbestos Litigation</h4>
+      <p>Mesothelioma is an aggressive cancer caused almost exclusively by asbestos exposure. Workers in construction, shipbuilding, manufacturing, and the military who developed mesothelioma or asbestosis may recover substantial compensation through litigation and asbestos trust funds. These cases remain among the most consistently compensated in personal injury law.</p>
+      <div class="tort-footer"><span class="tort-mdl">Ongoing · Asbestos trust funds available · Time-sensitive</span><span class="tort-arrow">→</span></div>
+    </a>
+  </div>
+
+
+<!-- ── CONSUMER PRODUCTS ── -->
+<div class="tort-section" id="tab-product">
+  <div class="cat-header">
+    <span class="cat-title">Consumer Product Liability Litigation</span>
+    <span class="cat-count">4 Active Cases</span>
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-product">Consumer Product</span>
+      <h4>Baby Food Heavy Metals Litigation</h4>
+      <p>Beech-Nut, Gerber, and Walmart-sold baby foods were found to contain dangerous levels of lead, arsenic, and mercury. Manufacturers allegedly knew from internal testing but continued selling without warnings. Children diagnosed with autism or neurological damage may have a valid claim.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active litigation · Growing docket 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-product">Consumer Product</span>
+      <h4>NEC Baby Formula Litigation</h4>
+      <p>Premature infants fed Abbott (Similac) and Mead Johnson (Enfamil) cow's milk-based formula have developed necrotizing enterocolitis (NEC), a devastating and often fatal intestinal disease. Manufacturers allegedly failed to warn neonatal hospitals and parents. Bellwether trials begin August 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">Active MDL · 750+ cases · Bellwether trials Aug 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-product">Consumer Product</span>
+      <h4>Weber Grill Brush Litigation</h4>
+      <p>Weber wire-bristle grill brushes have been linked to serious internal injuries when bristles detach and contaminate food. After being ingested, metal shards can lodge in the throat, stomach, or intestines requiring emergency surgery. Weber allegedly knew of the safety hazard but failed to warn consumers.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · New filings in 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-product">Consumer Product</span>
+      <h4>Stumptown Coffee Packaging Litigation</h4>
+      <p>Alaska Airlines passengers suffered thermal burns when onboard coffee makers using Stumptown packaging exploded mid-flight. Lawsuits allege the packaging was not designed or tested for airline conditions, that prior similar incidents occurred, and that no corrective action was taken before passengers were injured.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · New filings 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+  </div>
+</div>
+
+<!-- ── ABUSE ── -->
+<div class="tort-section" id="tab-abuse">
+  <div class="cat-header">
+    <span class="cat-title">Sexual Assault &amp; Institutional Abuse Litigation</span>
+    <span class="cat-count">5 Active Cases</span>
+  </div>
+  <div style="background:#fef2f2; border-left:4px solid var(--red); padding:16px 24px; margin-bottom:2px; font-size:13px; color:#7f1d1d; font-weight:500;">
+    ⚠️ <strong>Statutes of limitations vary by state.</strong> Many look-back windows are closing. If you are a survivor of sexual assault or institutional abuse, contact us immediately for a confidential, free consultation.
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card tort-featured">
+      <div>
+        <span class="tort-pill pill-abuse">Sexual Assault · Bellwether Trials Active</span>
+        <h4>Uber Passenger Sexual Assault Litigation</h4>
+        <p>Thousands of passengers — predominantly women — allege sexual assault by Uber drivers during rides. Uber is accused of negligent hiring, inadequate driver screening, failure to monitor, and misrepresenting safety to the public. Per-person settlement amounts are expected to be significant as bellwether trials proceed in 2026.</p>
+        <div class="tort-footer"><span class="tort-mdl">MDL #3084 · Bellwether trials 2026 · High settlement value</span><span class="tort-arrow">→</span></div>
+      </div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">High</span>
+        <span class="feat-stat-lbl">Expected per-person settlement value as trials advance in 2026</span>
+      </div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-abuse">Sexual Assault</span>
+      <h4>Lyft Passenger Sexual Assault Litigation</h4>
+      <p>Paralleling the Uber litigation, Lyft faces a growing wave of lawsuits from passengers who allege sexual assault by drivers. Plaintiffs allege Lyft failed to implement adequate safety screening and ignored known risks. An MDL consolidation is expected by end of 2026 — early filing is advised.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL consolidation expected 2026 · File now</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-abuse">Sex Trafficking</span>
+      <h4>Wyndham Hotels Sex Trafficking Litigation</h4>
+      <p>Trafficking victims are suing hotel owners and operators under the federal TVPRA, alleging management knowingly permitted trafficking on their premises. Corporate entities that benefit from trafficking face significant civil liability regardless of their direct involvement.</p>
+      <div class="tort-footer"><span class="tort-mdl">TVPRA claims · Active filings 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-abuse">Child Safety</span>
+      <h4>Roblox Child Sexual Abuse Litigation</h4>
+      <p>Roblox — a platform marketed to children — allegedly failed to protect minors from predators, enabling grooming, harassment, and exposure to explicit content for millions of children. A new MDL was formed in the Northern District of California in 2026 as cases rapidly escalate.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL #3166 · New MDL formed 2026 · Rapidly growing</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-abuse">Institutional Abuse</span>
+      <h4>LDS Church Sexual Abuse Litigation</h4>
+      <p>Plaintiffs allege the Church of Jesus Christ of Latter-Day Saints systematically covered up sexual abuse, shielded perpetrators, and discouraged victims from reporting to law enforcement through a confidential internal "helpline." State look-back windows are producing a surge of new cases in 2026.</p>
+      <div class="tort-footer"><span class="tort-mdl">MDL consolidation pending · Look-back windows open</span><span class="tort-arrow">→</span></div>
+    </a>
+  </div>
+</div>
+
+<!-- ── TECH ── -->
+<div class="tort-section" id="tab-tech">
+  <div class="cat-header">
+    <span class="cat-title">Technology &amp; Emerging Litigation</span>
+    <span class="cat-count">4 Active Cases</span>
+  </div>
+  <div class="tort-grid">
+    <a href="#contact" class="tort-card tort-featured">
+      <div>
+        <span class="tort-pill pill-tech">Technology · Historic Litigation</span>
+        <h4>Social Media Adolescent Addiction Litigation</h4>
+        <p>Meta (Instagram), TikTok, Snapchat, and YouTube face the most significant technology mass tort in U.S. history. Tens of thousands of families and 800+ school districts allege these platforms were deliberately engineered to addict children and teenagers, causing depression, eating disorders, self-harm, and suicide. The first bellwether trial — with Mark Zuckerberg testifying — began in Los Angeles in February 2026.</p>
+        <div class="tort-footer"><span class="tort-mdl">MDL #3047 · 10,000+ individual cases · 800+ school districts · Trial underway 2026</span><span class="tort-arrow">→</span></div>
+      </div>
+      <div class="feat-stat">
+        <span class="feat-stat-num">10,800+</span>
+        <span class="feat-stat-lbl">Cases — individuals + school districts. First trial Feb 2026.</span>
+      </div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-tech">Technology</span>
+      <h4>Video Game Addiction Litigation</h4>
+      <p>Epic Games (Fortnite), Activision Blizzard, and Microsoft face lawsuits alleging they used psychological manipulation tactics to addict minors — causing anxiety, depression, and social withdrawal. Litigation is advancing in multiple courts as the legal framework for platform addiction evolves rapidly.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · Multiple courts · Growing 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-emerging">Emerging</span>
+      <h4>Ultra-Processed Food Litigation</h4>
+      <p>Major food manufacturers face emerging lawsuits alleging they knowingly marketed ultra-processed products contributing to diabetes, obesity, and liver disease. Government entities including San Francisco have filed claims. Attorneys are pursuing a roadmap modeled after landmark tobacco and opioid litigation.</p>
+      <div class="tort-footer"><span class="tort-mdl">Early-stage litigation · Rapidly developing in 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    <a href="#contact" class="tort-card">
+      <span class="tort-pill pill-emerging">Emerging</span>
+      <h4>ALM Ortho Osseointegration Implant</h4>
+      <p>Patients with ALM Ortho osseointegration implants — designed to attach prosthetic limbs to bone — have reported catastrophic fractures during normal activity, causing severe injuries and emergency revision surgery. Lawsuits allege defective design with inadequate fatigue strength and insufficient warnings.</p>
+      <div class="tort-footer"><span class="tort-mdl">Emerging litigation · New filings 2026</span><span class="tort-arrow">→</span></div>
+    </a>
+    
+  </div>
+</div>
+
+  <!-- /section-inner -->
+
+</section>
+
+<!-- ════════ CONTACT & LOCATIONS ════════ -->
+
+<section class="section contact-section" id="contact">
+  <div class="section-inner">
+    <span class="section-tag">Get Help Now</span>
+    <h2 class="section-title">Free Case Evaluation.<br><em>No Fee Unless We Win.</em></h2>
+
+<div class="contact-grid">
+
+  <!-- FORM -->
+
+   <div class="contact-form-wrap">
+  <h3>Tell Us About Your Case</h3>
+  <p>
+    All consultations are confidential, free, and carry no obligation. An attorney will review your case and contact you within 24 hours.
+  </p>
+
+  <form id="caseform" method="POST" action="/wp-admin/admin-post.php">
+
+<input type="hidden" name="action" value="contact_case_form">
+
+<div class="form-group">
+  <label>Full Name *</label>
+  <input required type="text" name="fullname" placeholder="Your full name">
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+  <div class="form-group">
+    <label>Phone Number *</label>
+    <input required type="tel" name="phone" placeholder="(___) ___-____">
+  </div>
+
+  <div class="form-group">
+    <label>Email Address *</label>
+    <input required type="email" name="email" placeholder="your@email.com">
+  </div>
+</div>
+
+<div class="form-group">
+  <label>State You Live In</label>
+  <select name="state" class="case-select">
+    <option value="">Select your state...</option>
+    <option>Florida</option>
+    <option>Massachusetts</option>
+    <option>New Jersey</option>
+    <option>Michigan</option>
+    <option>Other State</option>
+  </select>
+</div>
+
+<div class="form-group">
+  <label>Type of Case</label>
+  <select name="case_type" class="case-select">
+    <option value="">Select a mass tort...</option>
+    <option>AFFF / PFAS Firefighting Foam</option>
+    <option>GLP-1 / Ozempic — Gastroparesis</option>
+    <option>GLP-1 / Ozempic — Vision Loss</option>
+    <option>Depo-Provera Brain Tumor</option>
+    <option>Hair Relaxer Cancer</option>
+    <option>J&J Talcum Powder</option>
+    <option>Hernia Mesh</option>
+    <option>Bard PowerPort</option>
+    <option>Philips CPAP Recall</option>
+    <option>Paragard IUD</option>
+    <option>Roundup Cancer</option>
+    <option>Paraquat Parkinson's</option>
+    <option>Camp Lejeune Water Contamination</option>
+    <option>Social Media Addiction</option>
+    <option>Uber / Lyft Sexual Assault</option>
+    <option>Suboxone Tooth Decay</option>
+    <option>Mesothelioma / Asbestos</option>
+    <option>NEC Baby Formula</option>
+    <option>Baby Food Heavy Metals</option>
+    <option>Proton Pump Inhibitor</option>
+    <option>Taxotere Hair / Vision Loss</option>
+    <option>Transvaginal Mesh</option>
+    <option>Cook IVC Filter</option>
+    <option>Tylenol Autism / ADHD</option>
+    <option>Roblox Child Abuse</option>
+    <option>LDS Church Abuse</option>
+    <option>JUUL / Vaping</option>
+    <option>Tepezza Hearing Loss</option>
+    <option>Other / Not Listed</option>
+  </select>
+</div>
+
+<div class="form-group">
+  <label>Brief Description of What Happened</label>
+  <textarea name="message" placeholder="Tell us briefly about your injury, when it occurred, and what product or drug was involved..."></textarea>
+</div>
+
+<button class="form-submit form-submit-new" style="border-radius:5px;">
+  Submit Free Case Evaluation →
+</button>
+
+<p class="form-disclaimer">
+  By submitting, you agree to be contacted by Ged Lawyers. Attorney-client privilege applies. Your information is never sold or shared.
+</p>
+
+  </form>
+</div>
+
+</div>
+
+  </div>
+</section>
+
+<!-- ════════ FOOTER ════════ -->
+
+<footer>
+
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-col">
+        <h4>Ged Lawyers Divisions</h4>
+        <ul>
+          <li><a class="footer-link" href="https://www.revenuecycleattorneys.com/">Healthcare Revenue Cycle Recovery</a>
+          <p class="footer-desc">Focused on healthcare reimbursement, insurance recovery, arbitration, and complex revenue disputes for physicians, hospitals, and healthcare providers.</p></li>
+          <li><a class="footer-link" href="https://www.gedlawyers.com/">Personal Injury &amp; Catastrophic Loss</a> 
+            <p class="footer-desc">Advocating for individuals and families affected by serious injury, wrongful death, and life-altering events.</p></li>
+        </li>
+          <li><a class="footer-link" href="https://www.glmasstorts.com/">Mass Torts &amp; Class Actions</a> <p class="footer-desc">Addressing large-scale harm involving defective products, pharmaceutical injuries, and systemic corporate misconduct.</p></li>
+        </li>
+        </ul>
+
+     <p class="footer-desc">Signup for our news and updates</p>
+    <form class="contact-form news-form" method="POST" action="/wp-admin/admin-post.php">
+
+  <input type="hidden" name="action" value="newsletter_signup">
+
+  <div style="display:flex; align-items:stretch;">
+
+<div class="form-group" style="margin-bottom:0; flex:1;">
+
+  <input 
+    class="news-input"
+    type="email"
+    name="email"
+    placeholder="Email"
+    required
+    style="
+      width: 100%;
+      border-top-left-radius: 5px;
+      border-bottom-left-radius: 5px;
+      border-right: none;
+      padding: 12px 14px;
+      color: #fff;
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.3);
+      outline: none;
+    "
+  >
+
+</div>
+
+<button 
+  class="form-submit-btn form-submit"
+  type="submit"
+  style="
+    margin: 0;
+    padding: 12px 18px;
+    text-transform: capitalize;
+    border-top-right-radius: 5px;
+    border-bottom-right-radius: 5px;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    white-space: nowrap;
+  "
+>
+  Signup
+</button>
+
+  </div>
+
+</form>
+      </div>
+      <div class="footer-col">
+        <h4>Ged Lawyers Locations</h4>
+             <!-- LOCATIONS -->
+      <div class="locations-wrap">
+        <!-- FL -->
+          <div class="loc-state">
+            <div class="loc-state-name">Florida</div>
+            <div class="loc-offices">
+              <div class="loc-office">
+                <div class="loc-city">Boca Raton</div>
+                <div class="loc-address">7171 North Federal Highway<br>Boca Raton, FL 33487</div>
+                <div class="loc-phone">(561) 995-1966</div>
+              </div>
+              <div class="loc-office">
+                <div class="loc-city">Naples</div>
+                <div class="loc-address">7955 Airport Pulling Rd N<br>Naples, FL 34109</div>
+                <div class="loc-phone">(239) 946-2496 | (239) 514-5048</div>
+              </div>
+              <div class="loc-office">
+                <div class="loc-city">Estero</div>
+                <div class="loc-address">21105 Design Parc Lane, Suite 101<br>Estero, FL 33928</div>
+                <div class="loc-phone">(239) 946-2496</div>
+              </div>
+              <div class="loc-office">
+                <div class="loc-city">Panama City</div>
+                <div class="loc-address">432 Mackenzie Ave.<br>Panama City, FL 32401</div>
+                <div class="loc-phone">(850) 905-3116</div>
+              </div>
+            </div>
+          </div>
+
+      <!-- right div -->
+      <div class="loc-state-right">
+            <!-- MA -->
+            <div class="loc-state">
+              <div class="loc-state-name">Massachusetts</div>
+              <div class="loc-offices">
+                <div class="loc-office">
+                  <div class="loc-city">Rehoboth</div>
+                  <div class="loc-address">492 Winthrop St, Suite 4<br>Rehoboth, MA 02769</div>
+                  <div class="loc-phone">(508) 859-9075</div>
+                </div>
+                <div class="loc-office">
+                  <div class="loc-city">Boston</div>
+                  <div class="loc-address">One Beacon St, Suite 17100<br>Boston, MA 02108</div>
+                  <div class="loc-phone">(617) 860-4834</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- NJ + MI -->
+            <div class="loc-state">
+              <div class="loc-state-name">New Jersey</div>
+                 <div class="loc-office">
+                  <div class="loc-city">Ridgewood</div>
+                  <div class="loc-address">15 Godwin Avenue,<br> Ridgewood, NJ 07450</div>
+                  <div class="loc-phone">(973) 500-2197</div>
+                </div>
+
+              
+            </div>
+
+            <div class="loc-state">
+              <div class="loc-state-name">Michigan</div>
+
+  <div class="loc-office">
+                  <div class="loc-city">Southfield</div>
+                  <div class="loc-address">26400 Lahser Rd, Suite 325<br>Southfield, MI 48076</div>
+                  <div class="loc-phone">(248) 213-9628</div>
+                </div>
+
+            </div>
+      </div>
+          </div>
+    </div>
+</div>
+
+
+<div class="footer-bottom">
+  <div class="upper-ft" >
+
+<a href="https://www.glmasstorts.com/"><img src="https://masstortsstg.wpenginepowered.com/wp-content/uploads/2026/04/GL_LOGOMonogram-1.png" class="nav-logo-main" /></a>
+
+   <div class="footer-links-text">
+        <ul>
+          <li><a href="#">Privacy & Policy</a></li>
+          <li><a href="#">Terms</a></li>
+          <li><a href="#">About us</a></li>
+          <li><a href="#">FAQ</a></li>
+        </ul>
+      </div>
+<div class="footer-socials">
+
+    <a href="https://web.facebook.com/gedlawyers/" target="_blank">
+
+  <img src="https://revenuecyclstg.wpengine.com/wp-content/uploads/2026/04/footer-icons-3.svg" width="6" height="17" alt="icon">
+</a>
+               <a href="https://x.com/GedLawyersLLP" target="_blank">
+  <img src="https://revenuecyclstg.wpengine.com/wp-content/uploads/2026/04/footer-icons-5.svg" width="20" height="17" alt="icon">
+</a>
+               <a href="https://www.linkedin.com/company/ged-lawyers-llp/" target="_blank">
+  <img src="https://revenuecyclstg.wpengine.com/wp-content/uploads/2026/04/footer-icons-4.svg" width="20" height="17" alt="icon">
+</a>
+            <a href="https://www.instagram.com/gedlawyers/" target="_blank">
+  <img src="https://revenuecyclstg.wpengine.com/wp-content/uploads/2026/04/footer-icons-1.svg" width="20" height="17" alt="icon">
+</a>
+       <a href="https://www.youtube.com/channel/UCHqbFy-qYzcvEKHHeitT1WQ/videos" target="_blank">
+  <img src="https://revenuecyclstg.wpengine.com/wp-content/uploads/2026/04/footer-icons-2.svg" width="20" height="17" alt="icon">
+</a>
+
+
+
+</div>
+
+  </div>
+  <div class="lower-ft" >  
+    <p class="footer-copy">© 2026 Ged Lawyers · GLMasstorts.com · 844-443-3529</p>
+    <p class="footer-disclaimer">Attorney Advertising. Prior results do not guarantee similar outcomes. The information on this website is for general informational purposes only and does not constitute legal advice. Contacting Ged Lawyers does not establish an attorney-client relationship.</p>
+
+   </div>
+      </div>
+  </div>
+</footer>
+
+<script>
+    
+    function closePopup() {
+  document.getElementById("thankyouPopup").classList.remove("active");
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const params = new URLSearchParams(window.location.search);
+
+  if (params.get("newsletter") === "success") {
+    document.getElementById("thankyouPopup").classList.add("active");
+
+    // remove query from URL (clean UX)
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+});
+    
+document.addEventListener("DOMContentLoaded", function () {
+  const toggles = document.querySelectorAll(".nav-toggle");
+
+  toggles.forEach(toggle => {
+    toggle.addEventListener("click", function (e) {
+      e.preventDefault();
+
+      const parent = this.closest(".nav-item-dropdown");
+
+      // close others
+      document.querySelectorAll(".nav-item-dropdown").forEach(item => {
+        if (item !== parent) item.classList.remove("active");
+      });
+
+      parent.classList.toggle("active");
+    });
+  });
+
+  // close on outside click
+  document.addEventListener("click", function (e) {
+    if (!e.target.closest(".nav-item-dropdown")) {
+      document.querySelectorAll(".nav-item-dropdown").forEach(item => {
+        item.classList.remove("active");
+      });
+    }
+  });
+});
+
+function showTab(id, btn) {
+  document.querySelectorAll('.tort-section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.tort-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
+}
+
+function toggleMenu() {
+  const menu = document.getElementById('mobileMenu');
+  const hamburger = document.getElementById('hamburger');
+  const isOpen = menu.classList.contains('open');
+  menu.classList.toggle('open');
+  hamburger.classList.toggle('open');
+  document.body.style.overflow = isOpen ? '' : 'hidden';
+}
+
+// Close mobile menu on ESC key
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    const menu = document.getElementById('mobileMenu');
+    if (menu.classList.contains('open')) toggleMenu();
+  }
+});
+</script>
+
+
+
+</body></html>
