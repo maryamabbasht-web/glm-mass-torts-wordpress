@@ -6,6 +6,57 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-26 — Site live: theme activated, 40 torts imported and verified
+
+**Type:** `feat` / `fix` · **Branch:** `fix/taxonomy-template` · **Tag:** `phase-3-live`
+
+### What changed
+
+- Created a Windows directory junction from the Studio site's `wp-content/themes/` to the repo theme
+- Installed Hello Elementor 3.4.9, Elementor 4.2.0, ACF 6.8.6
+- Activated the child theme — **first execution of any of this code**
+- Set permalinks to `/%postname%/`
+- Added a WP-CLI command `glm import-torts [--dry-run]`, sharing the admin page's code path
+- Imported all 40 torts
+- **Fixed:** added `taxonomy-tort_category.php`
+
+### Environment
+
+WordPress 7.0.2, PHP 8.4, SQLite, `http://localhost:8882/`.
+
+### The bug worth recording
+
+`/mass-torts/type/pharma/` rendered the parent theme's generic archive — wrong heading, **zero cards**.
+
+The cause was an assumption I had written into `archive-tort.php`'s docblock **as if it were fact**: that a taxonomy archive falls back to `archive-{post_type}.php`. It does not. WordPress's hierarchy runs `taxonomy-{tax}-{term}.php` → `taxonomy-{tax}.php` → `taxonomy.php` → `archive.php` → `index.php`, and never touches the post-type archive.
+
+Fixed with a delegating `taxonomy-tort_category.php` that requires `archive-tort.php`, so there is still one template to edit (**R4**).
+
+> **The lesson is not about the template hierarchy.** It is that a comment asserting how a framework behaves is worth exactly as much as a comment asserting anything else — nothing, until it runs. This shipped lint-clean and returned HTTP 200 while being completely wrong. The corrected docblock now says what breaks if the delegating file is deleted.
+
+### Verification — measured, not assumed
+
+| Check | Result |
+|---|---|
+| Torts imported | 40 |
+| Category split | pharma 10 · device 11 · toxic 6 · product 4 · abuse 5 · tech 4 |
+| Status split | active 28 · emerging 6 · settling 5 · appellate 1 |
+| Featured | 5 |
+| Empty ACF fields | none |
+| `/mass-torts/` | 40 cards, 6 tabs, 6 panels, 40 badges/pills/MDL/settlement |
+| Archive H1 | **"40 Active Mass Tort Cases"** — computed |
+| 6 taxonomy archives | correct counts, no cross-contamination |
+| Single page | H1, pill, status, breadcrumb, both facts, 3 related, disclaimer |
+| PHP errors from our code | none |
+
+The archive H1 is the point of the whole exercise: the source hardcoded "35" in two places and was wrong by five. That number is now `wp_count_posts()` and cannot drift.
+
+### Correction to an earlier note
+
+`learning.md` previously warned that Studio's SQLite meant go-live would be a content migration rather than a database copy. **That was wrong.** `studio export <file>.sql --mode db` produces a MySQL-compatible dump that imports into any MySQL or MariaDB host. Corrected in `learning.md`.
+
+---
+
 ## 2026-07-26 — Tort content extracted and importer built
 
 **Type:** `feat` · **Branch:** `feat/tort-importer`

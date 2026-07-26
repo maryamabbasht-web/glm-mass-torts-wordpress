@@ -6,21 +6,33 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 
 ## Status
 
-**Current phase:** Child theme written — [themes/hello-elementor-child/](themes/hello-elementor-child/)
-**Blocked on:** the WordPress Studio site path, to create the junction and activate
+**Current phase:** Site running locally with all 40 torts imported and verified
+**Next phase:** Phase 4 — component library (Saved Templates) and the homepage
 
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Repository foundation, docs, git conventions | ✅ Complete |
 | 1 | Component inventory from source HTML | ✅ Complete |
-| 2 | Child theme + design tokens | ✅ Written, ⏸ not yet activated |
-| 3 | Custom post types + ACF fields | ✅ Written, ⏸ not yet activated |
+| 2 | Child theme + design tokens | ✅ Complete |
+| 3 | Custom post types + ACF fields + content import | ✅ Complete |
 | 4 | Component library (Saved Templates) | ⬜ Not started |
 | 5 | Header, footer, page assembly | ⬜ Not started |
 | 6 | Editor guide, exports, handoff | ⬜ Not started |
 | — | *Deferred:* migration to live, redirects, SEO | ⬜ Not started |
 
-> **The theme is written but has never been executed.** It was built ahead of the environment so setup was never the bottleneck. All 7 PHP files pass `php -l` on PHP 8.3 and all 3 ACF JSON files parse — but nothing has run against WordPress. Expect a debugging pass on first activation. That is planned, not a surprise.
+### Live locally
+
+| | |
+|---|---|
+| URL | `http://localhost:8882/` (get the current one with `studio status`) |
+| Stack | WordPress 7.0.2 · PHP 8.4 · SQLite |
+| Plugins | Elementor 4.2.0, ACF 6.8.6 |
+| Theme | GLM Mass Torts (child of Hello Elementor 3.4.9) |
+| Content | **40 torts**, 6 categories, 5 statuses |
+
+**Working URLs:** `/mass-torts/` · `/mass-torts/{slug}/` ×40 · `/mass-torts/type/{cat}/` ×6
+
+The archive H1 reads **"40 Active Mass Tort Cases"** — computed from the database. The source hardcoded "35" in two places and was wrong by five. That number can no longer drift.
 
 > **No WordPress code exists in this repo yet.** Phases 0 and 1 were deliberately environment-independent so the architecture, rules, and component model could be settled before any building began.
 
@@ -167,21 +179,37 @@ git log --grep="^Why:" --format='%h %s%n%b'
 
 ---
 
+## Working on this site
+
+The Studio site lives at `C:\Users\MaryamAbbasNaqvi\Studio\glm-mass-torts` and its `wp-content/themes/hello-elementor-child` is a **directory junction** back to this repo. Edit here, WordPress sees it instantly.
+
+```powershell
+# Recreate the junction if it is ever lost
+New-Item -ItemType Junction `
+  -Path   "C:\Users\MaryamAbbasNaqvi\Studio\glm-mass-torts\wp-content\themes\hello-elementor-child" `
+  -Target "<repo>\themes\hello-elementor-child"
+```
+
+A junction rather than a symlink because it needs no administrator rights. Windows-only — on macOS or Linux use `ln -s`.
+
+### Studio CLI
+
+All WP-CLI commands go through `studio wp`, not bare `wp`:
+
+```bash
+studio status                          # URL, admin credentials, versions
+studio wp glm import-torts --dry-run   # re-seed the torts (safe, idempotent)
+studio wp eval '...'                   # run PHP against the live site
+studio export glm.sql --mode db        # MySQL-compatible dump for go-live
+```
+
 ## What is needed next
 
-1. **Provide the WordPress Studio site path** — the folder containing `wp-content`. Needed to create the junction.
-2. **Activate and debug** — install Hello Elementor and ACF free, activate the child theme, work through first-run issues.
-3. **Import the 40 torts** — already extracted to `themes/hello-elementor-child/data/torts.json`. Run **Tools → Import Torts** in the admin. It defaults to a dry run and is safe to re-run.
-
-### Connecting the repo to Studio
-
-```
-cmd /c mklink /J "<studio-site>\wp-content\themes\hello-elementor-child" "<repo>\themes\hello-elementor-child"
-```
-
-A junction rather than a symlink, because `mklink /J` needs no administrator rights. Edit in the repo, WordPress sees the change instantly, nothing to remember to copy.
-
-> **Gotcha:** this command is Windows-only. On macOS or Linux the equivalent is `ln -s`.
+1. **Phase 4** — build the remaining components as Elementor Saved Templates: hero, stats bar, about, divisions, contact.
+2. **Header and footer** via Header Footer Elementor, replacing the source's duplicated desktop/mobile menus with one responsive menu (**R8**).
+3. **Re-host the hotlinked assets** — the logo and social icons still point at other projects' staging servers.
+4. **Forms** — Elementor Free has no Form widget, so Fluent Forms or CF7. `single-tort.php` already exposes the `glm_case_form_shortcode` filter.
+5. **Write real content** for the tort pages. The seed gives each roughly 50 words, which is thin for pages meant to rank.
 
 ### The highest-value outcome of this migration
 

@@ -24,6 +24,62 @@ const GLM_IMPORT_KEY  = '_glm_import_key';
 const GLM_IMPORT_FILE = '/data/torts.json';
 
 /**
+ * WP-CLI: studio wp glm import-torts [--dry-run]
+ *
+ * The same code path as the admin page, so the two cannot diverge.
+ * Scriptable, which means the import is repeatable on a fresh site
+ * rather than a sequence of remembered clicks.
+ *
+ * @param array $args       Positional args (unused).
+ * @param array $assoc_args Flags.
+ */
+function glm_cli_import_torts( $args, $assoc_args ) {
+
+	$dry  = isset( $assoc_args['dry-run'] );
+	$seed = glm_read_tort_seed();
+
+	if ( is_wp_error( $seed ) ) {
+		WP_CLI::error( $seed->get_error_message() );
+	}
+
+	if ( ! function_exists( 'update_field' ) ) {
+		WP_CLI::warning( 'ACF inactive — values will be written as raw post meta.' );
+	}
+
+	$tally    = array();
+	$progress = WP_CLI\Utils\make_progress_bar(
+		$dry ? 'Dry run' : 'Importing torts',
+		count( $seed )
+	);
+
+	foreach ( $seed as $row ) {
+		$result           = glm_import_one_tort( $row, $dry );
+		$tally[ $result ] = ( $tally[ $result ] ?? 0 ) + 1;
+		$progress->tick();
+	}
+
+	$progress->finish();
+
+	foreach ( $tally as $action => $count ) {
+		WP_CLI::log( sprintf( '  %-14s %d', $action, $count ) );
+	}
+
+	if ( ! empty( $tally['failed'] ) ) {
+		WP_CLI::error( sprintf( '%d torts failed to import.', $tally['failed'] ) );
+	}
+
+	WP_CLI::success(
+		$dry
+			? 'Dry run complete — nothing was written.'
+			: sprintf( 'Import complete. %d torts published.', (int) wp_count_posts( 'tort' )->publish )
+	);
+}
+
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	WP_CLI::add_command( 'glm import-torts', 'glm_cli_import_torts' );
+}
+
+/**
  * Register the Tools submenu page.
  */
 function glm_register_importer_page() {
