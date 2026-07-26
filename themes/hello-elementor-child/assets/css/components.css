@@ -622,6 +622,119 @@ a.glm-btn {
 }
 
 
+/* ── Case evaluation form (Contact Form 7) ───────────────── */
+
+.glm-form__row {
+  margin: 0 0 0.875rem;
+}
+
+.glm-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.875rem;
+}
+
+.glm-form label {
+  display: block;
+  font-size: var(--glm-text-xs);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.glm-req {
+  color: var(--glm-accent);
+}
+
+.glm-form input[type="text"],
+.glm-form input[type="tel"],
+.glm-form input[type="email"],
+.glm-form select,
+.glm-form textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 0.75rem 0.875rem;
+  font-family: var(--glm-font-body);
+  font-size: 0.875rem;
+  color: var(--glm-white);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid var(--glm-accent);
+  border-radius: var(--glm-radius);
+  outline: none;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.glm-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.glm-form select option {
+  background: var(--glm-primary);
+  color: var(--glm-white);
+}
+
+.glm-form ::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.glm-form input:focus-visible,
+.glm-form select:focus-visible,
+.glm-form textarea:focus-visible {
+  border-color: var(--glm-cta);
+}
+
+.glm-form__submit input[type="submit"] {
+  padding: 0.9375rem 2.25rem;
+  font-family: var(--glm-font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--glm-white);
+  background: var(--glm-cta);
+  border: none;
+  border-radius: var(--glm-radius-md);
+  cursor: pointer;
+  transition: filter 0.2s;
+}
+
+.glm-form__submit input[type="submit"]:hover {
+  filter: brightness(1.1);
+}
+
+.glm-form__disclaimer {
+  margin-top: 0.75rem;
+  font-size: var(--glm-text-2xs);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* Honeypot: hidden from people, reachable by bots.
+   Deliberately NOT display:none — some bots skip those. */
+.glm-form__hp {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* On light backgrounds (tort detail pages sit on a dark panel already,
+   but the Contact page section is dark too — this covers page context). */
+.glm-tort-single__form .glm-form label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 900px) {
+  .glm-form__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 /* ── Page title (R11 — every page needs exactly one h1) ──── */
 
 .glm-page-title {

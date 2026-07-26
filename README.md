@@ -6,8 +6,7 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 
 ## Status
 
-**Current phase:** Full site running locally — header, footer, 7 pages, 46 generated URLs
-**Next phase:** Phase 6 — forms, editor guide, handoff
+**Current phase:** Feature-complete locally. Awaiting design pass, legal copy, and launch prep.
 
 | Phase | Description | Status |
 |---|---|---|
@@ -17,7 +16,7 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 | 3 | Custom post types + ACF fields + content import | ✅ Complete |
 | 4 | Component library + homepage | ✅ Complete |
 | 5 | Header, footer, navigation, all pages | ✅ Complete |
-| 6 | Forms, editor guide, handoff | ⬜ Not started |
+| 6 | Form, audit command, editor guide | ✅ Complete |
 | — | *Deferred:* migration to live, redirects, SEO | ⬜ Not started |
 
 ### Rebuild the whole site from git
@@ -29,9 +28,28 @@ studio wp glm import-content        # 4 results, 8 offices
 studio wp glm build-sections        # 5 section templates
 studio wp glm build-pages           # 7 pages + Primary menu
 studio wp glm build-header-footer   # header + footer
+studio wp glm build-form            # case evaluation form
+studio wp glm audit                 # check against the ruleset
 ```
 
-Every one of those is idempotent, and the section builder refuses to overwrite templates edited in Elementor unless you pass `--overwrite-edited`.
+Every one is idempotent, and the section builder **refuses to overwrite templates edited in Elementor** unless you pass `--overwrite-edited`.
+
+### Audit status
+
+Ten of eleven checks pass. The three outstanding items are the Privacy Policy, Terms and FAQ stubs — flagged by design until real copy exists.
+
+### Connecting a CRM
+
+Leads are emailed, never stored. To forward them to GoHighLevel, Litify or anything else, hook the seam — no form or template changes:
+
+```php
+add_action( 'glm_case_submission', function ( $lead ) {
+    wp_remote_post( 'https://your-webhook', array(
+        'headers' => array( 'Content-Type' => 'application/json' ),
+        'body'    => wp_json_encode( $lead ),
+    ) );
+} );
+```
 
 ### The homepage is six lines
 
