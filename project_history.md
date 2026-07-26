@@ -6,6 +6,53 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-26 — Phase 2/3 (partial): child theme scaffold
+
+**Type:** `feat` · **Branch:** `feat/child-theme-scaffold` · **Tag:** `phase-2-theme-scaffold`
+
+### What changed
+
+Built the complete child theme ahead of the WordPress environment, since it is all files and none of it needs WordPress running to be written.
+
+- `style.css` — theme header plus every design token as a CSS custom property, renamed by role
+- `functions.php` — enqueues, ACF JSON sync, one-time rewrite flush, `glm_field()` safe accessor, missing-ACF admin notice
+- `inc/post-types.php` — `tort`, `location`, `result`
+- `inc/taxonomies.php` — `tort_category`, `tort_status`, with 11 terms seeded once
+- `inc/parts/tort-card.php` — the card, designed once
+- `inc/tort-grid.php` — `[glm_tort_grid]`, `[glm_tort_count]`, `[glm_tort_options]`
+- `acf-json/` — three field groups as version-controlled files
+- `assets/css/components.css` — component styles, tokens only, no raw hex
+- `assets/js/tort-tabs.js` — ARIA tabs with arrow-key support and a no-JS fallback
+- `single-tort.php` — one file, forty pages
+- `archive-tort.php` — `/mass-torts/` and the category archives
+- `themes/hello-elementor-child/README.md` — install steps, shortcode reference, gotchas
+
+### Why
+
+Studio was not yet wired up, but the theme is just files. Building it now meant the environment was never the bottleneck. All of it is in git, ready to activate.
+
+### Verification
+
+All 7 PHP files pass `php -l` on PHP 8.3.32. All 3 ACF JSON files parse. **Nothing has been executed against WordPress yet** — a debugging pass on first activation is expected and planned.
+
+### Decisions made
+
+- **Tort grid renderer:** custom `[glm_tort_grid]` shortcode. Elementor Free has no ACF dynamic tags and 6 of the card's 8 fields are ACF fields, so no free widget can render it. Owning it in the theme also puts the site's most complex component into git rather than `postmeta` — a direct win against R12.
+- **URL scheme locked:** `/mass-torts/{slug}/`, categories at `/mass-torts/type/{cat}/`. Deliberately `type` and not `category`, which would read as core's post category.
+- **Local environment changed** from LocalWP to **WordPress Studio**, which was already installed. Brings a SQLite caveat — go-live becomes a content migration rather than a database copy. Recorded in `learning.md`.
+- **Repo ↔ Studio link:** Windows directory junction, because `mklink /J` needs no admin rights.
+
+### Design note worth keeping
+
+`tort_status` is a **taxonomy and an ACF text field together**. The source had 27 distinct status strings ("Active · Filing Now", "Settling · $1B+ Fund") across only 5 colours. The taxonomy carries the colour; the text field carries the wording. Modelling 27 terms would mean maintaining 27 colours; modelling it as free text alone would lose the colour logic. Worth remembering as a general shape: when a value has *many labels but few behaviours*, split it.
+
+### Open
+
+- Studio site path not yet provided, so the junction is not created
+- Header, footer, location and result renderers, and form integration remain
+
+---
+
 ## 2026-07-26 — Phase 1: component inventory
 
 **Type:** `docs` · **Branch:** `docs/component-inventory` · **Tag:** `phase-1-inventory`

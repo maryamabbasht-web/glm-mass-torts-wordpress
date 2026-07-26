@@ -1,0 +1,57 @@
+{
+    "key": "group_glm_result_details",
+    "title": "Result Details",
+    "fields": [
+        {
+            "key": "field_glm_result_amount",
+            "label": "Amount",
+            "name": "amount",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "The large figure, e.g. \"$11B+\" or \"198K+\". Keep it short — it renders at 32px.",
+            "required": 1,
+            "conditional_logic": 0,
+            "wrapper": { "width": "30", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": 12,
+            "placeholder": "$11B+",
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_glm_result_description",
+            "label": "Description",
+            "name": "result_description",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "One line explaining the figure. Include an as-of date where the number will age, e.g. \"Across 158 active multidistrict litigations as of Q1 2026\".",
+            "required": 1,
+            "conditional_logic": 0,
+            "wrapper": { "width": "70", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": "",
+            "placeholder": "Total settlements secured industry-wide for cancer victims",
+            "prepend": "",
+            "append": ""
+        }
+    ],
+    "location": [
+        [
+            {
+                "param": "post_type",
+                "operator": "==",
+                "value": "result"
+            }
+        ]
+    ],
+    "menu_order": 0,
+    "position": "normal",
+    "style": "default",
+    "label_placement": "top",
+    "instruction_placement": "label",
+    "hide_on_screen": "",
+    "active": true,
+    "description": "Verdict and settlement figures. The post title is the case name. These are attorney advertising claims — every figure must be defensible and carry an as-of date where it will age.",
+    "show_in_rest": 0,
+    "modified": 1785024000
+}
