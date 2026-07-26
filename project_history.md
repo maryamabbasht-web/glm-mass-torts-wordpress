@@ -47,6 +47,7 @@ Fixed with a delegating `taxonomy-tort_category.php` that requires `archive-tort
 | Archive H1 | **"40 Active Mass Tort Cases"** — computed |
 | 6 taxonomy archives | correct counts, no cross-contamination |
 | Single page | H1, pill, status, breadcrumb, both facts, 3 related, disclaimer |
+| **Full URL sweep** | **40/40 return HTTP 200, zero failures** |
 | PHP errors from our code | none |
 
 The archive H1 is the point of the whole exercise: the source hardcoded "35" in two places and was wrong by five. That number is now `wp_count_posts()` and cannot drift.
