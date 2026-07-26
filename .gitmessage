@@ -1,0 +1,46 @@
+
+
+# ─────────────────────────────────────────────────────────────
+#  <type>(<scope>): <imperative summary>
+#
+#  - concrete change
+#  - concrete change
+#
+#  Why: one or two sentences of rationale.   <-- REQUIRED
+#  Refs: learning.md R4                      <-- optional
+# ─────────────────────────────────────────────────────────────
+#
+#  TYPES
+#    feat      new capability
+#    fix       correcting broken behaviour
+#    docs      documentation only
+#    refactor  restructuring, no behaviour change
+#    chore     tooling, config, dependencies
+#    style     formatting or CSS only
+#    revert    undoing a previous commit
+#
+#  SCOPES
+#    repo  env  docs  history  theme  tokens  cpt  acf
+#    template  header  footer  page  export
+#
+#  SUBJECT LINE
+#    imperative mood — "add", not "added" / "adds"
+#    lowercase after the colon
+#    no trailing full stop
+#    50 characters maximum
+#
+#  BODY
+#    wrap at 72 characters
+#    "Why:" is required — it is what makes git log useful
+#    in a year, and is greppable: git log --grep="^Why:"
+#
+#  NEVER INCLUDE
+#    personal names or email addresses
+#    Co-Authored-By: trailers
+#    Signed-off-by: trailers
+#    any AI or tool attribution ("generated with", etc.)
+#
+#  CYCLE DISCIPLINE
+#    README.md and project_history.md updates ship in the
+#    SAME commit as the change they describe.
+# ─────────────────────────────────────────────────────────────
