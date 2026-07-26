@@ -22,15 +22,36 @@ Decisions made, and the principles we build by. This is the single source of tru
 | 10 | 2026-07-26 | URL scheme | `/mass-torts/{slug}/`, categories at `/mass-torts/type/{cat}/` | Matches the brand and domain. Locked before content exists because changing it later means 46 redirects. |
 | 11 | 2026-07-26 | Repo ↔ Studio link | **Windows directory junction** | `mklink /J` needs no admin rights, unlike a symlink. Edit in the repo, WordPress sees it instantly, nothing to remember to copy. |
 
-### ⚠️ Studio runs SQLite, not MySQL
+### Studio runs SQLite, not MySQL — but this is not a migration problem
 
-WordPress Studio uses **SQLite** by default. Production will be MySQL (the source's staging URLs point at WP Engine).
+WordPress Studio uses **SQLite** locally, via the SQLite Database Integration mu-plugin. Production will be MySQL.
 
-- Building the theme, CPTs, ACF fields and Elementor layouts — unaffected.
-- **Go-live is a content migration, not a database copy.** An SQLite database does not import into a MySQL host. Use WordPress's exporter or a migration plugin.
-- A minority of plugins use MySQL-specific SQL and misbehave on SQLite. If something acts strangely, suspect this first.
+> **Correction (2026-07-26):** an earlier note here claimed go-live would be a content migration rather than a database copy. **That was wrong.** Studio exports a MySQL-compatible dump:
+>
+> ```bash
+> studio export glm.sql --mode db     # standard MySQL DDL + INSERTs
+> mysql -u <user> -p <database> < glm.sql
+> ```
+>
+> No migration plugin needed. SQLite is a local storage detail, not lock-in.
 
-Recorded so it is not a surprise at launch. Worth re-verifying on the installed Studio version.
+What does still apply:
+
+- No `FULLTEXT` indexes, no stored procedures — use `LIKE` or a search plugin.
+- Never reference `DB_NAME` / `DB_HOST` / `DB_USER` / `DB_PASSWORD`; Studio strips them from `wp-config.php`. Use `$wpdb`.
+- Plugins that explicitly test for a MySQL connection may refuse to run.
+- Never delete `wp-content/db.php` or `wp-content/mu-plugins/sqlite-*`.
+
+### Studio has a full WP-CLI
+
+`studio wp <command>` — not bare `wp`. This is why the whole build could be driven from the terminal: plugin installs, theme activation, the tort import, and every verification query.
+
+```bash
+studio status                    # URL, admin credentials, PHP/WP versions
+studio wp plugin install X --activate
+studio wp glm import-torts --dry-run
+studio wp eval '...'             # arbitrary PHP against the live site
+```
 
 ### Reversed decisions — kept deliberately
 

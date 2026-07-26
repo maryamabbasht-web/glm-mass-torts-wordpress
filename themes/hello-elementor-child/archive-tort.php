@@ -2,9 +2,13 @@
 /**
  * Tort archive — /mass-torts/
  *
- * The full tabbed browser. Also serves the category archives at
- * /mass-torts/type/{slug}/ via WordPress's template hierarchy fallback,
- * where it renders a single filtered panel instead of the tab bar.
+ * The full tabbed browser. Also renders the category archives at
+ * /mass-torts/type/{slug}/, as a single filtered grid with no tab bar —
+ * but only because taxonomy-tort_category.php delegates here.
+ *
+ * WordPress does NOT fall back from a taxonomy archive to
+ * archive-{post_type}.php. Deleting that delegating file silently sends
+ * category archives to the parent theme's generic archive.php.
  *
  * @package glm
  */

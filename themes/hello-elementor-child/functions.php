@@ -77,7 +77,8 @@ require_once GLM_DIR . '/inc/post-types.php';
 require_once GLM_DIR . '/inc/taxonomies.php';
 require_once GLM_DIR . '/inc/tort-grid.php';
 
-if ( is_admin() ) {
+// Admin UI, plus WP-CLI so the import is scriptable and repeatable.
+if ( is_admin() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
 	require_once GLM_DIR . '/inc/importer.php';
 }
 
