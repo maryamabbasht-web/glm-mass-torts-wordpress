@@ -6,20 +6,21 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 
 ## Status
 
-**Current phase:** Phase 1 complete — component inventory
-**Next phase:** Phase 2 — WordPress baseline
-**Open decision:** how to build the tort grid — see [component-inventory.md §5](docs/component-inventory.md#5-the-tort-grid-decision)
+**Current phase:** Child theme written — [themes/hello-elementor-child/](themes/hello-elementor-child/)
+**Blocked on:** the WordPress Studio site path, to create the junction and activate
 
 | Phase | Description | Status |
 |---|---|---|
 | 0 | Repository foundation, docs, git conventions | ✅ Complete |
 | 1 | Component inventory from source HTML | ✅ Complete |
-| 2 | WordPress baseline, child theme, design tokens | ⬜ Not started |
-| 3 | Custom post types + ACF fields | ⬜ Not started |
+| 2 | Child theme + design tokens | ✅ Written, ⏸ not yet activated |
+| 3 | Custom post types + ACF fields | ✅ Written, ⏸ not yet activated |
 | 4 | Component library (Saved Templates) | ⬜ Not started |
 | 5 | Header, footer, page assembly | ⬜ Not started |
 | 6 | Editor guide, exports, handoff | ⬜ Not started |
 | — | *Deferred:* migration to live, redirects, SEO | ⬜ Not started |
+
+> **The theme is written but has never been executed.** It was built ahead of the environment so setup was never the bottleneck. All 7 PHP files pass `php -l` on PHP 8.3 and all 3 ACF JSON files parse — but nothing has run against WordPress. Expect a debugging pass on first activation. That is planned, not a surprise.
 
 > **No WordPress code exists in this repo yet.** Phases 0 and 1 were deliberately environment-independent so the architecture, rules, and component model could be settled before any building began.
 
@@ -67,7 +68,7 @@ All free. No paid licences anywhere.
 
 | Component | Choice | Notes |
 |---|---|---|
-| Local environment | **LocalWP** | Not yet installed |
+| Local environment | **WordPress Studio** | Installed. Runs SQLite, not MySQL — see [learning.md](learning.md) |
 | Theme | **Hello Elementor** + child theme | Child theme is the git-tracked artifact |
 | Builder | **Elementor Free** | Flexbox Container only — never legacy Section/Column |
 | Header / footer | **Header Footer Elementor** | Replaces Pro's Theme Builder |
@@ -168,9 +169,19 @@ git log --grep="^Why:" --format='%h %s%n%b'
 
 ## What is needed next
 
-1. **Decide how to build the tort grid** — [component-inventory.md §5](docs/component-inventory.md#5-the-tort-grid-decision). Recommendation is a custom shortcode in the child theme.
-2. **Install LocalWP** and create the site — this unblocks Phase 2
-3. **Settle CPT and taxonomy slugs** before any content exists, since they become 46 URLs
+1. **Provide the WordPress Studio site path** — the folder containing `wp-content`. Needed to create the junction.
+2. **Activate and debug** — install Hello Elementor and ACF free, activate the child theme, work through first-run issues.
+3. **Import the 40 torts** from `source/glmasstorts.html` into the CPT.
+
+### Connecting the repo to Studio
+
+```
+cmd /c mklink /J "<studio-site>\wp-content\themes\hello-elementor-child" "<repo>\themes\hello-elementor-child"
+```
+
+A junction rather than a symlink, because `mklink /J` needs no administrator rights. Edit in the repo, WordPress sees the change instantly, nothing to remember to copy.
+
+> **Gotcha:** this command is Windows-only. On macOS or Linux the equivalent is `ln -s`.
 
 ### The highest-value outcome of this migration
 

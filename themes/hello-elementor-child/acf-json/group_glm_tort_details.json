@@ -1,0 +1,153 @@
+{
+    "key": "group_glm_tort_details",
+    "title": "Tort Details",
+    "fields": [
+        {
+            "key": "field_glm_status_label",
+            "label": "Status Label",
+            "name": "status_label",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "The exact wording shown on the badge, e.g. \"Active · Filing Now\" or \"Settling · $1B+ Fund\". The COLOUR comes from the Tort Status taxonomy in the sidebar — this field only controls the words. Leave blank to fall back to the status name.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": { "width": "50", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": 60,
+            "placeholder": "Active · Filing Now",
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_glm_pill_suffix",
+            "label": "Category Pill Suffix",
+            "name": "pill_suffix",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "Optional text appended to the category pill, e.g. \"· #1 Largest MDL\". Leave blank for most torts.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": { "width": "50", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": 40,
+            "placeholder": "· #1 Largest MDL",
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_glm_mdl_reference",
+            "label": "MDL Reference",
+            "name": "mdl_reference",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "Shown in the card footer. This is often what a visitor is searching for, so keep it accurate. Example: \"MDL #2738 · Largest Active Mass Tort in the U.S.\"",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": { "width": "", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": "",
+            "placeholder": "MDL #2738 · Largest Active Mass Tort in the U.S.",
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_glm_settlement_estimate",
+            "label": "Settlement Estimate",
+            "name": "settlement_estimate",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "The badge on the right of the card footer. Example: \"Est. $300K–$5M+ per case\" or \"Pre-Settlement · File Now\". Keep figures defensible — this is attorney advertising.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": { "width": "", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": "",
+            "placeholder": "Est. $300K–$5M+ per case",
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_glm_is_featured",
+            "label": "Featured Tort",
+            "name": "is_featured",
+            "aria-label": "",
+            "type": "true_false",
+            "instructions": "Featured torts render as a wide, dark card spanning two columns with a pulled-out statistic. Use sparingly — roughly one per category.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": { "width": "", "class": "", "id": "" },
+            "message": "Render as a featured card",
+            "default_value": 0,
+            "ui": 1,
+            "ui_on_text": "Featured",
+            "ui_off_text": "Standard"
+        },
+        {
+            "key": "field_glm_featured_stat_number",
+            "label": "Featured Statistic — Number",
+            "name": "featured_stat_number",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "The large figure in the featured card's stat panel, e.g. \"67,100+\" or \"$1B+\".",
+            "required": 0,
+            "conditional_logic": [
+                [
+                    {
+                        "field": "field_glm_is_featured",
+                        "operator": "==",
+                        "value": "1"
+                    }
+                ]
+            ],
+            "wrapper": { "width": "30", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": 20,
+            "placeholder": "67,100+",
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_glm_featured_stat_label",
+            "label": "Featured Statistic — Label",
+            "name": "featured_stat_label",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "The caption beneath the figure. Include an as-of date so the number can be audited later, e.g. \"Pending cases as of Q1 2026\".",
+            "required": 0,
+            "conditional_logic": [
+                [
+                    {
+                        "field": "field_glm_is_featured",
+                        "operator": "==",
+                        "value": "1"
+                    }
+                ]
+            ],
+            "wrapper": { "width": "70", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": "",
+            "placeholder": "Pending cases as of Q1 2026",
+            "prepend": "",
+            "append": ""
+        }
+    ],
+    "location": [
+        [
+            {
+                "param": "post_type",
+                "operator": "==",
+                "value": "tort"
+            }
+        ]
+    ],
+    "menu_order": 0,
+    "position": "normal",
+    "style": "default",
+    "label_placement": "top",
+    "instruction_placement": "label",
+    "hide_on_screen": "",
+    "active": true,
+    "description": "Card and detail-page fields for the tort post type. Category and status are taxonomies in the sidebar, not fields here.",
+    "show_in_rest": 0,
+    "modified": 1785024000
+}

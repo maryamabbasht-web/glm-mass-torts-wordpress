@@ -1,0 +1,120 @@
+# GLM Mass Torts — child theme
+
+Child of **Hello Elementor**. Holds design tokens, custom post types, and the tort grid renderer.
+
+> **Status: written but never executed.** This was built ahead of the WordPress environment. Expect a debugging pass on first activation — that is planned, not a surprise.
+
+---
+
+## Install
+
+1. Install and activate **Hello Elementor** (the parent) in WordPress
+2. Junction this directory into the site's `wp-content/themes/`
+3. Activate **GLM Mass Torts**
+4. Install **Advanced Custom Fields** (free) — an admin notice appears if it is missing
+5. Visit **Settings → Permalinks** and click Save if any tort URL 404s
+
+On first load the theme seeds 6 category terms and 5 status terms, then flushes rewrite rules once.
+
+---
+
+## Structure
+
+```
+style.css              Theme header + ALL design tokens as CSS vars
+functions.php          Enqueues, ACF JSON sync, includes, safe helpers
+inc/
+  post-types.php       tort · location · result
+  taxonomies.php       tort_category · tort_status + seeded terms
+  tort-grid.php        [glm_tort_grid] and two helper shortcodes
+  parts/
+    tort-card.php      The "loop item" — the card, designed once
+acf-json/              Field groups as version-controlled files
+assets/
+  css/components.css   Component styles, tokens only
+  js/tort-tabs.js      Tab behaviour, progressive enhancement
+single-tort.php        ONE file → 40 tort pages
+archive-tort.php       /mass-torts/ and /mass-torts/type/{slug}/
+```
+
+---
+
+## Shortcodes
+
+| Shortcode | Renders |
+|---|---|
+| `[glm_tort_grid]` | Full tabbed browser, all categories |
+| `[glm_tort_grid tabs="no" featured="yes" limit="6"]` | Homepage preview — featured torts only |
+| `[glm_tort_grid category="pharma" tabs="no"]` | One category, flat grid |
+| `[glm_tort_count]` | Live published tort count |
+| `[glm_tort_options]` | `<option>` tags for the contact form's case-type field |
+
+### Attributes for `glm_tort_grid`
+
+| Attribute | Default | Purpose |
+|---|---|---|
+| `tabs` | `yes` | Show the category tab bar |
+| `category` | — | Restrict to one `tort_category` slug |
+| `featured` | `no` | Only torts flagged `is_featured` |
+| `limit` | `-1` | Maximum results |
+| `heading` | `yes` | Show per-category header bars |
+
+---
+
+## Why this is a shortcode and not an Elementor widget
+
+Elementor Free has **no ACF dynamic tags**, and six of the tort card's eight fields are ACF fields. No free grid widget can render this card — it would lose the MDL reference, settlement estimate, status badge, category pill, and the featured variant.
+
+Owning it here also means the site's most complex component lives in **git rather than `postmeta`** (**R12**). It is the one piece that most needs to be reproducible, and now it is.
+
+This is the free-tier equivalent of an Elementor Pro Loop Grid:
+
+| Elementor Pro | Here |
+|---|---|
+| Loop Item template | `inc/parts/tort-card.php` |
+| Loop Grid widget | `[glm_tort_grid]` |
+| Dynamic tag → ACF | `glm_field()` in the partial |
+
+Design the card once; the loop repeats it. Same principle, different renderer.
+
+---
+
+## Locked decisions
+
+| Decision | Value | Consequence of changing |
+|---|---|---|
+| CPT slug | `mass-torts` | 46 redirects |
+| Category base | `mass-torts/type` | 6 redirects |
+| Category slugs | `pharma` `device` `toxic` `product` `abuse` `tech` | Redirects + CSS class renames |
+| Status slugs | `active` `settling` `emerging` `appellate` `inactive` | CSS class renames |
+
+Status slugs map directly to CSS classes (`.glm-status--active`). Renaming a term label is safe; renaming its **slug** is not.
+
+---
+
+## Design token naming
+
+Tokens are named by **role**, not appearance — `--glm-accent`, not `--gold`.
+
+The source did the opposite, and it aged badly: `--gold` held `#506CFB`, an indigo blue, because a rebrand changed the values and left the names. Real gold `#c8a84b` was still hardcoded in the footer, bypassing the variables entirely.
+
+Appearance-based names force a choice between a misleading name and a rename touching every file. Nobody does the rename, so the lie persists.
+
+---
+
+## Gotchas
+
+- **PHP errors white-screen the site.** Edit through the repo and test locally. Never use the WordPress file editor.
+- **`status_label` vs `tort_status`.** The taxonomy drives the *colour*; the ACF text field carries the *wording*. The source had 27 distinct status strings across 5 colours — this split is why we do not maintain 27 terms.
+- **Excerpts.** The card uses `get_the_excerpt()`. With no manual excerpt WordPress auto-trims the content, which can cut mid-sentence. Write real excerpts.
+- **Term seeding runs once**, guarded by the `glm_terms_seeded` option against `GLM_VERSION`. Bump the version in `functions.php` to re-seed.
+- **Rewrite flush runs once** on version change. Never call `flush_rewrite_rules()` on every load.
+- **ACF is required.** Without it `glm_field()` returns fallbacks and cards render title and excerpt only — degraded, not fatal.
+
+---
+
+## Not built yet
+
+- Header and footer — Phase 5, via Header Footer Elementor
+- Location and result renderers — Phase 4
+- Form integration — Phase 5. `single-tort.php` exposes the `glm_case_form_shortcode` filter so swapping form plugins never means editing 40 pages.

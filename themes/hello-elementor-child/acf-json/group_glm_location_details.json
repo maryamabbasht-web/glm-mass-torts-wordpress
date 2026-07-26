@@ -1,0 +1,97 @@
+{
+    "key": "group_glm_location_details",
+    "title": "Office Details",
+    "fields": [
+        {
+            "key": "field_glm_loc_state",
+            "label": "State",
+            "name": "state",
+            "aria-label": "",
+            "type": "select",
+            "instructions": "Offices are grouped by state in the footer and on the locations page.",
+            "required": 1,
+            "conditional_logic": 0,
+            "wrapper": { "width": "40", "class": "", "id": "" },
+            "choices": {
+                "Florida": "Florida",
+                "Massachusetts": "Massachusetts",
+                "New Jersey": "New Jersey",
+                "Michigan": "Michigan"
+            },
+            "default_value": "Florida",
+            "return_format": "value",
+            "multiple": 0,
+            "allow_null": 0,
+            "ui": 0,
+            "ajax": 0,
+            "placeholder": ""
+        },
+        {
+            "key": "field_glm_loc_address",
+            "label": "Street Address",
+            "name": "address",
+            "aria-label": "",
+            "type": "textarea",
+            "instructions": "Street and city on separate lines. Line breaks are preserved when rendered.",
+            "required": 1,
+            "conditional_logic": 0,
+            "wrapper": { "width": "60", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": "",
+            "rows": 3,
+            "placeholder": "7171 North Federal Highway\nBoca Raton, FL 33487",
+            "new_lines": "br"
+        },
+        {
+            "key": "field_glm_loc_phone",
+            "label": "Phone",
+            "name": "phone",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "Displayed and linked as a tel: link.",
+            "required": 1,
+            "conditional_logic": 0,
+            "wrapper": { "width": "50", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": 20,
+            "placeholder": "(561) 995-1966",
+            "prepend": "",
+            "append": ""
+        },
+        {
+            "key": "field_glm_loc_phone_secondary",
+            "label": "Secondary Phone",
+            "name": "phone_secondary",
+            "aria-label": "",
+            "type": "text",
+            "instructions": "Optional. Only the Naples office currently has two numbers.",
+            "required": 0,
+            "conditional_logic": 0,
+            "wrapper": { "width": "50", "class": "", "id": "" },
+            "default_value": "",
+            "maxlength": 20,
+            "placeholder": "(239) 514-5048",
+            "prepend": "",
+            "append": ""
+        }
+    ],
+    "location": [
+        [
+            {
+                "param": "post_type",
+                "operator": "==",
+                "value": "location"
+            }
+        ]
+    ],
+    "menu_order": 0,
+    "position": "normal",
+    "style": "default",
+    "label_placement": "top",
+    "instruction_placement": "label",
+    "hide_on_screen": "",
+    "active": true,
+    "description": "Office location details. The post title is the city name.",
+    "show_in_rest": 0,
+    "modified": 1785024000
+}

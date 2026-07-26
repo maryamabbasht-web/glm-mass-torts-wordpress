@@ -15,9 +15,22 @@ Decisions made, and the principles we build by. This is the single source of tru
 | 3 | 2026-07-25 | Source HTML | Lives in `source/`, inside the repo | Keeps the design reference under version control and diffable, and keeps all work inside the workspace. |
 | 4 | 2026-07-25 | Repo scope | Child theme + docs + source + exports | WP core, plugins and uploads are excluded. Your code is versioned; 50MB of core is not. |
 | 5 | 2026-07-25 | Git identity | Anonymous **messages**; author field unchanged | No names, emails, or AI attribution in message content. The author field keeps the real identity. |
-| 6 | 2026-07-25 | Local environment | **LocalWP** | Free, mature on Windows, one-click PHP version switching, built-in HTTPS. |
+| 6 | 2026-07-26 | Local environment | **WordPress Studio** | Already installed. Free, by Automattic, lightweight. See the SQLite caveat below. |
 | 7 | 2026-07-25 | Site status | Fresh build; replaces live site later | Redirect and SEO migration is deferred, not dropped. |
 | 8 | 2026-07-25 | Role-based restriction | **None** | No role discrimination. Everyone who edits has full access. Consequence: the defence against mess is ergonomics, not permissions — see R14. |
+| 9 | 2026-07-26 | Tort grid renderer | **Custom `[glm_tort_grid]` shortcode** in the child theme | Elementor Free has no ACF dynamic tags, and 6 of the card's 8 fields are ACF fields. Owning it in the theme also puts the most complex component in git rather than `postmeta` — a direct win against R12. |
+| 10 | 2026-07-26 | URL scheme | `/mass-torts/{slug}/`, categories at `/mass-torts/type/{cat}/` | Matches the brand and domain. Locked before content exists because changing it later means 46 redirects. |
+| 11 | 2026-07-26 | Repo ↔ Studio link | **Windows directory junction** | `mklink /J` needs no admin rights, unlike a symlink. Edit in the repo, WordPress sees it instantly, nothing to remember to copy. |
+
+### ⚠️ Studio runs SQLite, not MySQL
+
+WordPress Studio uses **SQLite** by default. Production will be MySQL (the source's staging URLs point at WP Engine).
+
+- Building the theme, CPTs, ACF fields and Elementor layouts — unaffected.
+- **Go-live is a content migration, not a database copy.** An SQLite database does not import into a MySQL host. Use WordPress's exporter or a migration plugin.
+- A minority of plugins use MySQL-specific SQL and misbehave on SQLite. If something acts strangely, suspect this first.
+
+Recorded so it is not a surprise at launch. Worth re-verifying on the installed Studio version.
 
 ### Reversed decisions — kept deliberately
 
@@ -28,6 +41,18 @@ Recording reversals matters as much as recording choices. It stops us re-treadin
 | Bricks Builder | Elementor Free | Bricks has no free version at all. Discovered after the budget constraint was stated. |
 | ACF Pro | ACF free | Repeater exists to repeat rows *inside one post*. Under R5, each post **is** a row and the grid widget does the repeating — so Pro is unnecessary. |
 | **R7 — content-only editor access** | Removed entirely | Elementor Free has no Role Manager, and the user confirmed no role-based discrimination is wanted. Its intent was rehomed into R14. |
+| LocalWP | WordPress Studio | Studio was already installed, so the setup cost was zero. Brings the SQLite caveat noted above. |
+
+### Locked slugs — changing these is expensive
+
+| Thing | Slug | Cost of changing |
+|---|---|---|
+| Tort CPT | `mass-torts` | 46 redirects |
+| Category base | `mass-torts/type` | 6 redirects |
+| Category terms | `pharma` `device` `toxic` `product` `abuse` `tech` | Redirects **and** CSS class renames |
+| Status terms | `active` `settling` `emerging` `appellate` `inactive` | CSS class renames |
+
+Status and category slugs map directly to CSS classes (`.glm-status--active`, `.glm-pill--pharma`). Renaming a term's **label** is always safe. Renaming its **slug** breaks styling.
 
 ---
 
