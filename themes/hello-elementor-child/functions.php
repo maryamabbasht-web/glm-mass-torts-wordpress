@@ -83,6 +83,10 @@ require_once GLM_DIR . '/inc/elementor-sections.php';
 require_once GLM_DIR . '/inc/pages.php';
 require_once GLM_DIR . '/inc/elementor-header-footer.php';
 
+if ( defined( 'WP_CLI' ) && WP_CLI ) {
+	require_once GLM_DIR . '/inc/audit.php';
+}
+
 /**
  * Declare support for Header Footer Elementor.
  *

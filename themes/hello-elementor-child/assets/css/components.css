@@ -622,6 +622,20 @@ a.glm-btn {
 }
 
 
+/* ── Page title (R11 — every page needs exactly one h1) ──── */
+
+.glm-page-title {
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: var(--glm-section-y) var(--glm-section-x) 0;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h2);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-primary);
+}
+
+
 /* ── Site header ─────────────────────────────────────────── */
 
 .glm-header {

@@ -35,9 +35,21 @@ function glm_page_definitions() {
 				'[glm_section slug="contact"]',
 			),
 		),
+		/*
+		 * NOTE ON THE <h1> ON EVERY PAGE (R11)
+		 *
+		 * The section templates are shared, so their top heading is an <h2>
+		 * — only the hero carries an <h1>, and the hero only appears on the
+		 * home page. Reusing sections elsewhere therefore produced pages
+		 * with ZERO <h1>, which `wp glm audit` caught on five pages.
+		 *
+		 * Each non-home page declares its own <h1> rather than promoting a
+		 * shared section's heading, which would give the home page two.
+		 */
 		'about' => array(
 			'title'   => 'About',
 			'content' => array(
+				'<h1 class="glm-page-title">About Ged Lawyers</h1>',
 				'[glm_section slug="about"]',
 				'[glm_section slug="stats"]',
 				'[glm_section slug="divisions"]',
@@ -47,13 +59,14 @@ function glm_page_definitions() {
 		'contact-us' => array(
 			'title'   => 'Contact',
 			'content' => array(
+				'<h1 class="glm-page-title">Contact Ged Lawyers</h1>',
 				'[glm_section slug="contact"]',
 			),
 		),
 		'locations' => array(
 			'title'   => 'Locations',
 			'content' => array(
-				'<h1>Our Offices</h1>',
+				'<h1 class="glm-page-title">Our Offices</h1>',
 				'[glm_locations]',
 				'[glm_section slug="contact"]',
 			),
@@ -68,17 +81,26 @@ function glm_page_definitions() {
 		'privacy-policy' => array(
 			'title'   => 'Privacy Policy',
 			'stub'    => true,
-			'content' => array( '<p><strong>This page needs real content.</strong> It must describe what personal data the case-evaluation forms collect, how long it is retained, who it is shared with, and how to request deletion.</p>' ),
+			'content' => array(
+				'<h1 class="glm-page-title">Privacy Policy</h1>',
+				'<p><strong>This page needs real content.</strong> It must describe what personal data the case-evaluation forms collect, how long it is retained, who it is shared with, and how to request deletion.</p>',
+			),
 		),
 		'terms' => array(
 			'title'   => 'Terms',
 			'stub'    => true,
-			'content' => array( '<p><strong>This page needs real content.</strong> Include attorney-advertising disclosures and a statement that using the site does not create an attorney-client relationship.</p>' ),
+			'content' => array(
+				'<h1 class="glm-page-title">Terms of Use</h1>',
+				'<p><strong>This page needs real content.</strong> Include attorney-advertising disclosures and a statement that using the site does not create an attorney-client relationship.</p>',
+			),
 		),
 		'faq' => array(
 			'title'   => 'FAQ',
 			'stub'    => true,
-			'content' => array( '<p><strong>This page needs real content.</strong></p>' ),
+			'content' => array(
+				'<h1 class="glm-page-title">Frequently Asked Questions</h1>',
+				'<p><strong>This page needs real content.</strong></p>',
+			),
 		),
 	);
 }
