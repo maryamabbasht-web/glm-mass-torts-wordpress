@@ -6,6 +6,60 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-27 — Phase 6: audit command, editor guide, case evaluation form
+
+**Type:** `feat` · **Branches:** `feat/audit-and-guide`, `feat/case-form`
+
+### What changed
+
+- Added `inc/audit.php` — `wp glm audit`, checking the site against the ruleset
+- Added `docs/editor-guide.md` — plain-language guide for non-technical staff
+- Added an `<h1>` to every page, and styled it
+- Installed **Contact Form 7**; added `inc/forms.php` and `wp glm build-form`
+- Wired the form into `single-tort.php` through the filter exposed in Phase 3
+
+### The audit earned its keep immediately
+
+First run: **five pages with no `<h1>` at all**.
+
+The cause is structural and I would not have spotted it by eye. Section templates are shared, so their top heading is an `<h2>` — only the hero carries an `<h1>`, and the hero appears only on the home page. Reusing sections on About, Contact and the legal pages therefore produced pages with zero `<h1>`. Each non-home page now declares its own.
+
+> A ruleset enforced by memory decays the week after handoff. Fourteen written rules are now one command, and the command found a real defect on its first run.
+
+The three legal stubs remain flagged deliberately — they *should* fail until someone writes them.
+
+### Contact Form 7, chosen for the data posture
+
+CF7 **does not persist submissions**. It emails them and forgets. For a firm collecting injury descriptions that is the safer default: a site compromise exposes no case history, because none is stored.
+
+Nicer builders (Fluent Forms) store every entry by default, which would put names, phone numbers and injury details at rest in WordPress indefinitely — a real liability, and one that would demand a retention and purge policy nobody would maintain.
+
+### Built for the CRM handover
+
+The stated plan is to forward leads into GoHighLevel or Litify. Rather than leave that as a future rebuild, every successful submission fires:
+
+```php
+do_action( 'glm_case_submission', $lead, $contact_form );
+```
+
+with normalised data. Connecting a CRM is one function on that hook — no form or template changes.
+
+### The dropdown cannot drift
+
+The case-type `<select>` is populated from the tort CPT at render time via `wpcf7_form_tag`. It renders **42 options**: placeholder + 40 torts + "Other".
+
+The source's dropdown listed **29** case types against 40 torts, because it was maintained by hand. That class of drift is now impossible.
+
+### Spam
+
+A honeypot field, positioned off-screen rather than `display:none` because some bots skip hidden inputs. Explicitly *not* reCAPTCHA v3, which silently drops real users — on a site where a lost enquiry is a lost case, that trade is wrong. hCaptcha before launch if volume demands it.
+
+### Audit result
+
+Ten of eleven checks pass. The three outstanding items are the legal stubs, which are flagged by design.
+
+---
+
 ## 2026-07-27 — Phase 5: header, footer, navigation and all pages
 
 **Type:** `feat` · **Branch:** `feat/header-footer-pages`

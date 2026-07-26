@@ -82,6 +82,7 @@ require_once GLM_DIR . '/inc/elementor-kit.php';
 require_once GLM_DIR . '/inc/elementor-sections.php';
 require_once GLM_DIR . '/inc/pages.php';
 require_once GLM_DIR . '/inc/elementor-header-footer.php';
+require_once GLM_DIR . '/inc/forms.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once GLM_DIR . '/inc/audit.php';
