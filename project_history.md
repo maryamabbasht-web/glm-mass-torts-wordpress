@@ -6,6 +6,56 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-27 — Phase 4b: hero section generated; R4's mechanism corrected
+
+**Type:** `feat` / `fix` · **Branch:** `feat/hero-section`
+
+### What changed
+
+- Added `inc/elementor-sections.php` — generates Elementor Saved Templates from PHP
+- Generated the **Hero** section: container tree, real copy from the source, Navigator layers named (**R7**)
+- Added `[glm_section slug="..."]` — a replacement for R4's insertion mechanism
+- Added hero and shared button styles to `components.css`
+- Corrected R4 in `learning.md` and `docs/component-inventory.md`
+
+### ⚠️ R4's stated mechanism does not exist
+
+R4 said: insert Saved Templates with `[elementor-template id="123"]`. That is how Elementor 3.x worked.
+
+**It is not registered in Elementor Free 4.2.0.** Verified on the live site — the literal text rendered into the page. WordPress had even curled the quotes into `id=&#8221;50&#8243;` first, because `wptexturize` only skips *registered* shortcodes.
+
+Elementor 4.x registers `elementor-element` instead. We use neither. `[glm_section slug="hero"]` is built on `get_builder_content_for_display()`, and is better than what it replaced:
+
+- **Slug-addressed, not ID.** Rebuild a template and every page still resolves; a hardcoded ID breaks everywhere.
+- **Registered**, so `wptexturize` leaves the quotes alone.
+- **In git.**
+- **Fails visibly** to logged-in editors rather than rendering nothing.
+
+> The rule was right; the *mechanism* was assumed. It was flagged as "verify on install" back in Phase 1, and the verification failed. Rules should name the outcome — mechanisms need checking against the installed version.
+
+### Structure in Elementor, styling in CSS
+
+Elementor 4.x does not expose the classic style controls (`title_color`, `typography_*`, `padding`) on these widgets, and its styling schema shifts between versions. More to the point, anything set in Elementor's style panel lives in `postmeta` where git cannot see it (**R12**).
+
+So generated sections carry **only a CSS class per element**. Structure and copy live in Elementor where editors reach them; appearance lives in `components.css` using the design tokens.
+
+The trade-off is that an editor cannot restyle these from the panel. Given the founding brief, that is a feature.
+
+### Two silent-failure gotchas
+
+1. **Widgets take `_css_classes`; containers take `css_classes`** — no leading underscore. Wrong key and the element still renders, just without the class. Nothing errors; styling simply never applies.
+2. **Elementor caches rendered output.** After rebuilding a template, pages keep serving the old markup — which reads exactly like "my fix did not work" and sends you chasing the wrong bug. Cost a round trip. `glm build-sections` now clears the file cache automatically.
+
+### R12 status is better than planned
+
+Both the kit *and* the hero are **generated from version-controlled PHP**, so neither needs exporting — the file regenerates them. The `exports/` ritual now applies only to sections built by hand in the Elementor UI.
+
+### Verification
+
+Hero renders on a real page: all container and widget classes present, all copy correct, Elementor assets and compiled template CSS loading. Test pages deleted. Site now holds 40 torts, 2 Elementor templates, 1 page.
+
+---
+
 ## 2026-07-27 — Phase 4a: brand assets imported, Elementor kit generated from theme tokens
 
 **Type:** `feat` · **Branch:** `feat/elementor-kit`
