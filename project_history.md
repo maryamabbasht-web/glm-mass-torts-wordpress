@@ -6,6 +6,51 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-27 — Phase 5: header, footer, navigation and all pages
+
+**Type:** `feat` · **Branch:** `feat/header-footer-pages`
+
+### What changed
+
+- Installed **Header Footer Elementor**
+- Declared `add_theme_support( 'header-footer-elementor' )` — HFE only auto-detects a short list of themes and a child theme is not on it, so without this it renders its settings screen but never outputs anything
+- Added `inc/pages.php` — page and menu builder, `wp glm build-pages`
+- Added `inc/elementor-header-footer.php` — `wp glm build-header-footer`
+- Created 7 pages: Home, About, Contact, Locations, Privacy Policy, Terms, FAQ
+- Built the Primary menu and both site templates
+- Added header and footer CSS
+
+### The duplicate menu problem is gone
+
+The source shipped a desktop nav **and** a separately maintained mobile menu, each carrying its own copy of the tort links. They had already drifted apart from each other.
+
+There is now **one menu**, rendered responsively (**R6**, **R8**). Its six category items are generated from the `tort_category` taxonomy, so adding a category adds a menu item — nobody maintains a list.
+
+### The logo hotlink is finally dead
+
+The homepage now reports **zero `wpengine` references**. Every asset is served locally. That risk — a staging server elsewhere being pruned and taking the production logo with it — is closed.
+
+### Legal pages ship as visible stubs
+
+The source linked Privacy Policy, Terms, About and FAQ all to `href="#"`. For a firm collecting injury details through web forms, a missing privacy policy is a compliance exposure, not a cosmetic gap.
+
+They now exist as pages carrying explicit "this needs real content" copy and a `_glm_needs_content` flag, and `build-pages` warns about them on every run. A visible stub is harder to forget than a dead link.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Header | logo, nav, CTA all rendering |
+| Menu items | 11, including 6 generated category links |
+| Footer | divisions, offices, socials, legal |
+| Offices from CPT | 8 across 4 state groups |
+| Social links | 5 |
+| Logo source | local uploads |
+| `wpengine` hotlinks | **0** |
+| URL sweep | 10 / 10 return 200 |
+
+---
+
 ## 2026-07-27 — Phase 4 complete: all five sections built, homepage assembled
 
 **Type:** `feat` · **Branch:** `feat/remaining-sections`

@@ -6,8 +6,8 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 
 ## Status
 
-**Current phase:** Homepage live locally, assembled from five section templates
-**Next phase:** Phase 5 — header, footer, and the remaining pages
+**Current phase:** Full site running locally — header, footer, 7 pages, 46 generated URLs
+**Next phase:** Phase 6 — forms, editor guide, handoff
 
 | Phase | Description | Status |
 |---|---|---|
@@ -16,9 +16,22 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 | 2 | Child theme + design tokens | ✅ Complete |
 | 3 | Custom post types + ACF fields + content import | ✅ Complete |
 | 4 | Component library + homepage | ✅ Complete |
-| 5 | Header, footer, remaining pages | ⬜ Not started |
-| 6 | Editor guide, exports, handoff | ⬜ Not started |
+| 5 | Header, footer, navigation, all pages | ✅ Complete |
+| 6 | Forms, editor guide, handoff | ⬜ Not started |
 | — | *Deferred:* migration to live, redirects, SEO | ⬜ Not started |
+
+### Rebuild the whole site from git
+
+```bash
+studio wp glm apply-kit             # Elementor globals from theme tokens
+studio wp glm import-torts          # 40 torts
+studio wp glm import-content        # 4 results, 8 offices
+studio wp glm build-sections        # 5 section templates
+studio wp glm build-pages           # 7 pages + Primary menu
+studio wp glm build-header-footer   # header + footer
+```
+
+Every one of those is idempotent, and the section builder refuses to overwrite templates edited in Elementor unless you pass `--overwrite-edited`.
 
 ### The homepage is six lines
 
