@@ -14,6 +14,24 @@ define( 'GLM_DIR', get_stylesheet_directory() );
 define( 'GLM_URI', get_stylesheet_directory_uri() );
 
 /**
+ * Cache-busting version for a theme asset.
+ *
+ * Uses the file's modification time rather than GLM_VERSION.
+ *
+ * WHY: GLM_VERSION is a constant, so with it the browser caches
+ * components.css and keeps serving the old copy after every edit. You save
+ * a change, hard-refresh, see nothing, and start debugging CSS that was
+ * never loaded. filemtime() means saving the file IS the cache bust.
+ *
+ * @param string $relative_path Path from the theme root, leading slash.
+ * @return string
+ */
+function glm_asset_version( $relative_path ) {
+	$file = GLM_DIR . $relative_path;
+	return file_exists( $file ) ? (string) filemtime( $file ) : GLM_VERSION;
+}
+
+/**
  * Enqueue parent and child styles.
  *
  * Hello Elementor registers 'hello-elementor' and 'hello-elementor-theme-style'.
@@ -24,14 +42,14 @@ function glm_enqueue_assets() {
 		'glm-tokens',
 		GLM_URI . '/style.css',
 		array( 'hello-elementor' ),
-		GLM_VERSION
+		glm_asset_version( '/style.css' )
 	);
 
 	wp_enqueue_style(
 		'glm-components',
 		GLM_URI . '/assets/css/components.css',
 		array( 'glm-tokens' ),
-		GLM_VERSION
+		glm_asset_version( '/assets/css/components.css' )
 	);
 }
 add_action( 'wp_enqueue_scripts', 'glm_enqueue_assets', 20 );
