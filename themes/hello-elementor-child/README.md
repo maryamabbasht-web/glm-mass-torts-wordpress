@@ -42,6 +42,94 @@ archive-tort.php       /mass-torts/ and /mass-torts/type/{slug}/
 
 ---
 
+## Changing the styling of a section
+
+**Styling lives in CSS, not in Elementor's style panel.** Three layers — pick by how far the change should reach.
+
+### Decide which layer
+
+| If the change should… | Edit | Example |
+|---|---|---|
+| Apply **everywhere** | `style.css` → `:root` | Brand colour, type scale, spacing, breakpoints |
+| Apply to **one component** | `assets/css/components.css` | Hero padding, card border, footer column widths |
+| Apply to **one element, once** | Elementor's style panel | Almost never — see below |
+
+### The workflow
+
+1. **Find the class.** Inspect the element in devtools. Everything of ours is prefixed `glm-` — `.glm-hero__title`, `.glm-tort-card__settlement`, `.glm-footer__legal`.
+2. **Edit the file** in this repo. The junction means WordPress sees it immediately.
+3. **Save and hard-refresh** (`Ctrl + F5`).
+
+No build step. No `wp glm` command. No Elementor cache clear — that is only for *structural* changes, not CSS.
+
+> The stylesheet version is `filemtime()`, so saving the file is the cache bust. With a static version string the browser keeps the old copy and you end up debugging CSS that was never loaded.
+
+### Worked example — make the hero less tall
+
+```css
+/* assets/css/components.css */
+.glm-hero {
+  padding: 4rem var(--glm-section-x) 2.5rem;   /* was 6.25rem / 3.125rem */
+}
+```
+
+Save, refresh. Done.
+
+### Worked example — change the accent colour site-wide
+
+```css
+/* style.css */
+:root {
+  --glm-accent: #3B5BDB;   /* was #506CFB */
+}
+```
+
+That updates every rule, tag, border, arrow and active state at once, because nothing hardcodes the hex (**R1**).
+
+```bash
+# Elementor's own Global Colors are generated from PHP, so update them too:
+studio wp glm apply-kit
+```
+
+> **Two places, on purpose.** `style.css` serves the theme's own components; the kit serves anything built in Elementor's UI. `inc/elementor-kit.php` holds the same values — change both, or run `apply-kit` after editing the file.
+
+### Adding a new element in Elementor
+
+Give it a class rather than styling it in the panel:
+
+**Advanced → CSS Classes → `glm-your-thing`**
+
+Then style `.glm-your-thing` in `components.css`. Your CSS stays in git; panel styling would not.
+
+### Why not just use the style panel?
+
+You can, and nothing breaks. But:
+
+- It lands in **`postmeta`**, so git never sees it (**R12**) — invisible in diffs and code review
+- It is per-element, so the same tweak gets repeated and drifts (**R1**)
+- Elementor 4.x does not expose the classic style controls on these widgets anyway
+
+**Reasonable exceptions:** a genuine one-off on a single page, or trying something quickly before committing it to CSS. If you find yourself applying the same panel tweak twice, that is the signal to move it into `components.css`.
+
+### Changing structure, not just styling
+
+Different question, and it has a fork:
+
+| You want | Do this |
+|---|---|
+| A quick change to one section | Edit it in Elementor. `build-sections` will **refuse to overwrite it** afterwards |
+| A change that stays reproducible from git | Edit `inc/elementor-sections.php`, then `wp glm build-sections --force` |
+
+> **The tension is real:** once you edit a generated section in Elementor, the PHP generator no longer describes what is on the site. The guard protects your work but does not reconcile the two. For anything you would want back after a rebuild, change the generator.
+
+Check your work at any point:
+
+```bash
+studio wp glm audit
+```
+
+---
+
 ## Elementor design tokens are generated, not clicked
 
 ```bash
