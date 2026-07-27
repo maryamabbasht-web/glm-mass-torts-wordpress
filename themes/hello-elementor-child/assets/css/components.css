@@ -590,7 +590,7 @@ a.glm-btn {
   font-size: var(--glm-h1);
   font-weight: 700;
   line-height: 1.07;
-  color: var(--glm-white);
+  color: var(--glm-white) !important;
   margin: 0 0 1.5rem;
 }
 
