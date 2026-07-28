@@ -3,6 +3,37 @@
    -------------------------------------------------------------
    Every value below references a token from style.css.
    No raw hex, no arbitrary px (learning.md R1, R9).
+
+   -------------------------------------------------------------
+   WHY SOME SELECTORS START WITH `html`
+   -------------------------------------------------------------
+   Not a typo, and please do not "tidy" it away.
+
+   Elementor writes its kit defaults into a per-section CSS file
+   for every widget type on the page:
+
+       .elementor-widget-heading .elementor-heading-title { … }
+       .elementor-widget-button  .elementor-button        { … }
+
+   That is two classes — specificity (0,2,0) — and those files are
+   printed in the <body>, AFTER this stylesheet loads in the <head>.
+
+   So a rule like `.glm-hero__title .elementor-heading-title` is
+   also (0,2,0): an exact tie, decided by document order, which
+   Elementor wins every time. That is what makes it look like
+   "Elementor is overriding everything".
+
+   Prefixing with `html` makes it (0,2,1) — one extra element in
+   the specificity — which beats (0,2,0) no matter what order the
+   files load in. Five characters, no !important, deterministic.
+
+   RULE: any selector that reaches into Elementor's own markup
+   (.elementor-heading-title, .elementor-button, .elementor-widget-*)
+   needs the `html` prefix. Selectors on our own .glm-* classes do
+   not — Elementor never styles those.
+
+   Deliberately NOT !important: that escalates, and the only way to
+   override an !important is another one. Specificity composes.
    ============================================================= */
 
 
@@ -507,7 +538,7 @@
 /* Shared by the hero and every later section. Elementor's button
    widget wrapper is .elementor-button, so these override it. */
 
-.glm-btn .elementor-button,
+html .glm-btn .elementor-button,
 a.glm-btn {
   display: inline-flex;
   align-items: center;
@@ -524,19 +555,19 @@ a.glm-btn {
   transition: filter 0.2s, transform 0.15s, background 0.2s, border-color 0.2s;
 }
 
-.glm-btn--cta .elementor-button {
+html .glm-btn--cta .elementor-button {
   background: var(--glm-cta);
   color: var(--glm-white);
 }
 
-.glm-btn--cta .elementor-button:hover,
-.glm-btn--cta .elementor-button:focus-visible {
+html .glm-btn--cta .elementor-button:hover,
+html .glm-btn--cta .elementor-button:focus-visible {
   background: var(--glm-cta);
   filter: brightness(1.1);
   transform: translateY(-1px);
 }
 
-.glm-btn--outline .elementor-button {
+html .glm-btn--outline .elementor-button {
   background: transparent;
   color: var(--glm-white);
   border: 1px solid rgba(255, 255, 255, 0.3);
@@ -544,8 +575,8 @@ a.glm-btn {
   text-transform: none;
 }
 
-.glm-btn--outline .elementor-button:hover,
-.glm-btn--outline .elementor-button:focus-visible {
+html .glm-btn--outline .elementor-button:hover,
+html .glm-btn--outline .elementor-button:focus-visible {
   border-color: var(--glm-accent);
   background: rgba(80, 108, 251, 0.1);
 }
@@ -585,12 +616,12 @@ a.glm-btn {
 }
 
 .glm-hero__title,
-.glm-hero__title .elementor-heading-title {
+html .glm-hero__title .elementor-heading-title {
   font-family: var(--glm-font-display);
   font-size: var(--glm-h1);
   font-weight: 700;
   line-height: 1.07;
-  color: var(--glm-white) !important;
+  color: var(--glm-white);
   margin: 0 0 1.5rem;
 }
 
@@ -714,6 +745,8 @@ a.glm-btn {
 
 /* Honeypot: hidden from people, reachable by bots.
    Deliberately NOT display:none — some bots skip those. */
+/* !important is deliberate here: this must stay hidden no matter what
+   any plugin or future rule does. A visible honeypot is a broken form. */
 .glm-form__hp {
   position: absolute !important;
   left: -9999px !important;
@@ -797,7 +830,7 @@ a.glm-btn {
   color: var(--glm-white);
 }
 
-.glm-header__cta .elementor-button {
+html .glm-header__cta .elementor-button {
   white-space: nowrap;
   padding: 0.625rem 1.375rem;
 }
@@ -917,7 +950,7 @@ a.glm-btn {
 /* ── Shared section furniture ────────────────────────────── */
 
 .glm-section-title,
-.glm-section-title .elementor-heading-title {
+html .glm-section-title .elementor-heading-title {
   font-family: var(--glm-font-display);
   font-size: var(--glm-h2);
   font-weight: 700;
@@ -1106,7 +1139,7 @@ a.glm-btn {
 }
 
 .glm-divisions .glm-section-title,
-.glm-divisions .glm-section-title .elementor-heading-title {
+html .glm-divisions .glm-section-title .elementor-heading-title {
   color: var(--glm-white);
 }
 
@@ -1160,7 +1193,7 @@ a.glm-btn {
 }
 
 .glm-div-card__title,
-.glm-div-card__title .elementor-heading-title {
+html .glm-div-card__title .elementor-heading-title {
   font-family: var(--glm-font-display);
   font-size: var(--glm-text-3xl);
   font-weight: 700;
@@ -1176,7 +1209,7 @@ a.glm-btn {
   color: rgba(255, 255, 255, 0.85);
 }
 
-.glm-div-card__link .elementor-button {
+html .glm-div-card__link .elementor-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1190,12 +1223,12 @@ a.glm-btn {
   text-transform: uppercase;
 }
 
-.glm-div-card__link .elementor-button::after {
+html .glm-div-card__link .elementor-button::after {
   content: '→';
   transition: transform 0.2s;
 }
 
-.glm-div-card__link .elementor-button:hover::after {
+html .glm-div-card__link .elementor-button:hover::after {
   transform: translateX(5px);
 }
 
@@ -1214,7 +1247,7 @@ a.glm-btn {
 }
 
 .glm-contact .glm-section-title,
-.glm-contact .glm-section-title .elementor-heading-title {
+html .glm-contact .glm-section-title .elementor-heading-title {
   color: var(--glm-white);
 }
 
@@ -1223,7 +1256,7 @@ a.glm-btn {
 }
 
 .glm-contact__sub,
-.glm-contact__sub .elementor-heading-title {
+html .glm-contact__sub .elementor-heading-title {
   margin: 2rem 0 0.5rem;
   font-family: var(--glm-font-display);
   font-size: 1.75rem;

@@ -177,6 +177,42 @@ function glm_run_audit() {
 		}
 	}
 
+	/* ── Stylesheet ──────────────────────────────────────── */
+
+	/*
+	 * R9 — selectors that reach into Elementor's markup must out-specify
+	 * it, or they lose silently.
+	 *
+	 * Elementor emits `.elementor-widget-X .elementor-Y` at (0,2,0) into
+	 * per-section CSS printed in the <body>, after our stylesheet in the
+	 * <head>. An equal-specificity rule of ours therefore loses on order
+	 * alone — no error, the styling just never applies.
+	 *
+	 * The `html` prefix makes ours (0,2,1), which wins regardless of order.
+	 */
+	$css_file = GLM_DIR . '/assets/css/components.css';
+
+	if ( is_readable( $css_file ) ) {
+
+		$css = file_get_contents( $css_file ); // phpcs:ignore
+
+		// Selector lines that touch Elementor markup.
+		preg_match_all( '/^([^{}\n\/]*\.elementor-[^{}\n]*)[,{]\s*$/m', $css, $sel );
+
+		foreach ( $sel[1] as $s ) {
+			$s = trim( $s );
+			if ( 0 !== strpos( $s, 'html ' ) ) {
+				$add( 'R9', "components.css — `{$s}` targets Elementor markup without the `html` prefix; it will lose on load order" );
+			}
+		}
+
+		// !important should be rare and explained.
+		preg_match_all( '/^\s*([a-z-]+)\s*:[^;]*!important/m', $css, $imp );
+		if ( count( $imp[1] ) > 4 ) {
+			$add( 'R9', sprintf( 'components.css uses !important %d times — prefer specificity, which composes', count( $imp[1] ) ) );
+		}
+	}
+
 	/* ── Site-level ──────────────────────────────────────── */
 
 	// R6 — header and footer must exist as templates.
