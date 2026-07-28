@@ -149,3 +149,58 @@ The trade is favourable:
 4. Test the 767 / 900 / 1024 bands specifically
 5. Only then swap the header template and remove the HFE widget
 6. Re-run `wp glm audit`
+
+---
+
+## 7. Implementation status — 2026-07-29
+
+`glm_nav()` is **built and running in parallel**. HFE still renders the site header; nothing has been swapped.
+
+- `inc/nav-menu.php` — `GLM_Nav_Walker`, `glm_render_nav()`, `[glm_nav]`
+- `assets/js/nav.js` — 6.1 KB, no jQuery, no dependencies
+- `assets/css/components.css` — `.glm-nav` block, breakpoint as a custom property
+
+### Verified automatically
+
+| Check | Result |
+|---|---|
+| `<nav>` + `aria-label` | ✅ |
+| Real `<button>` for both toggles | ✅ (HFE uses `div[role=button]`) |
+| `aria-expanded`, `aria-haspopup`, `aria-controls` | ✅ |
+| `aria-current="page"` on the active item | ✅ — **HFE emits none** |
+| Screen-reader labels | ✅ "Show submenu for Mass Torts" |
+| No nested interactive elements | ✅ 0 — **HFE has 1** |
+| Menu item parity with HFE | ✅ 11 = 11, identical set |
+| DOM weight | ✅ **34 nodes vs HFE's 36** |
+| Breakpoint consistency | ✅ CSS 900 / JS reads `--glm-nav-breakpoint` |
+| No-JS fallback | ✅ menu visible, toggle hidden |
+| PHP / JS syntax | ✅ |
+| Header regression, 8 templates | ✅ all 200, no PHP errors |
+
+### Still requires a human at a browser
+
+Static analysis cannot press keys or compare pixels:
+
+- Tab / Shift-Tab / Enter / Space / Escape / arrows actually working
+- Focus trap behaviour with the mobile panel open
+- Console free of runtime errors
+- Visual comparison at 375 / 900 / 1440
+- Dropdown positioning and hover states
+
+### Asset impact — measured
+
+| Asset | Size | Removable by dropping the widget? |
+|---|--:|---|
+| `hfe-frontend-js` | 33.9 KB | ✅ yes — enqueued only via the nav widget's `get_script_depends()` |
+| HFE nav selectors in generated CSS | 37 occurrences | ✅ yes |
+| `hfe-widgets-style` (`frontend.css`) | **83 KB** | ❌ **no** — enqueued unconditionally by HFE |
+| jQuery | — | ❌ no — other things depend on it |
+| `glm_nav` JS added | 6.1 KB | — |
+
+**Net: about −28 KB of JavaScript and 37 CSS selectors.**
+
+> ### ⚠️ HFE itself cannot be uninstalled
+>
+> HFE provides the **header and footer template system** (R6) — the `elementor-hf` post type and its display conditions. Replacing the nav widget removes its *widget* assets, not the plugin.
+>
+> Uninstalling HFE entirely would mean also replacing the header/footer mechanism with `header.php` / `footer.php` in the child theme. That is a separate, larger piece of work, and it would take the 83 KB `frontend.css` with it.

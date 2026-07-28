@@ -6,6 +6,50 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-29 — Text-editor fix + parallel glm_nav() implementation
+
+**Type:** `fix` / `feat` · **Branch:** `feat/glm-nav`
+
+### Part 1 — text-editor neutralisation corrected
+
+The reset targeted `.elementor-widget-text-editor`, which is the widget **root** — the same element GLM classes sit on. At (0,2,1) it out-specified our own (0,1,0) component rules and **suppressed GLM styling on all 21 text-editor widgets**.
+
+- Removed text-editor from the neutralisation layer
+- Prefixed its 14 component rules with `html` so they reach (0,1,1) and beat Elementor's (0,1,0)
+- Added an audit check that fails if the reset ever targets a widget root again
+
+The invariant is now stated precisely at the top of `components.css`, per-widget, derived from the full audit rather than from the first case encountered.
+
+### Part 2 — glm_nav() built alongside HFE
+
+Nothing swapped. HFE still renders the header.
+
+- `inc/nav-menu.php` — walker, renderer, `[glm_nav]`
+- `assets/js/nav.js` — 6.1 KB, no jQuery
+- `.glm-nav` CSS block with the breakpoint as a custom property the JS reads
+
+**Deliberately better than what it replaces:** real `<button>` elements instead of `div[role=button]`; the parent link stays a link with a *separate* sibling toggle button, avoiding HFE's nested-interactive-element pattern; a focus trap HFE never had; and `aria-current="page"`, which HFE does not emit.
+
+**It also fixes a live bug.** HFE hardcodes 767/1024 in its JavaScript while this project breaks at 900, so between 901px and 1024px the script and the stylesheet disagreed about whether to show the hamburger. `nav.js` reads `--glm-nav-breakpoint` from CSS instead.
+
+### Verification
+
+Automated checks all pass: ARIA attributes, button semantics, screen-reader labels, zero nested interactive elements, 11 = 11 menu item parity, **34 DOM nodes vs HFE's 36**, breakpoint consistency, no-JS fallback, and 8 templates returning 200 with no PHP errors.
+
+> **Two measurement artifacts caught during verification**, both my own fault rather than real defects: `aria-current` appeared to fail because the test page was not itself a menu item, and `glm_nav` appeared heavier because HFE's hamburger sits *outside* its `<nav>` and my selector missed it. Re-measured fairly, both pass.
+
+### Asset impact
+
+`hfe-frontend-js` (33.9 KB) is enqueued **only** as a dependency of the nav widget, so dropping the widget removes it, along with 37 nav selectors. Net saving roughly **28 KB of JavaScript**.
+
+But `hfe-widgets-style` (83 KB) is enqueued **unconditionally**, and HFE provides the header/footer template system itself — so **the plugin cannot be uninstalled**, only its nav widget stopped being used.
+
+### Not yet done
+
+Keyboard interaction, focus-trap behaviour, console errors and pixel comparison need a human at a browser. Static analysis cannot press Escape.
+
+---
+
 ## 2026-07-29 — Resolve the two-design-systems conflict
 
 **Type:** `refactor` · **Branch:** `refactor/single-styling-system`
