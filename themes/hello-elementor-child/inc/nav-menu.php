@@ -263,3 +263,72 @@ function glm_enqueue_nav() {
 	}
 }
 add_action( 'wp_enqueue_scripts', 'glm_enqueue_nav', 20 );
+
+/**
+ * Drop HFE's widget stylesheets.
+ *
+ * HFE enqueues these UNCONDITIONALLY for every page, whether or not any
+ * of its widgets are present. Since the navigation menu was the last HFE
+ * widget in use and it has been replaced, all of it is dead weight:
+ *
+ *   hfe-widgets-style                    83,015 bytes
+ *   hfe-social-share-icons-fontawesome   72,184
+ *   hfe-elementor-icons                  22,258
+ *   hfe-icons-list                       10,255
+ *   hfe-social-icons                      5,110
+ *   hfe-social-share-icons-brands           732
+ *   hfe-nav-menu-icons                      727
+ *   ------------------------------------------
+ *                                       194,281 bytes
+ *
+ * `hfe-style` is deliberately KEPT — it is the header/footer template
+ * layout CSS, which we still rely on (R6).
+ *
+ * GOTCHA: if an HFE widget is ever added to a template, its styling will
+ * be missing. `wp glm audit` fails in that case rather than leaving it to
+ * be discovered visually. To re-enable, return false from the filter.
+ */
+function glm_dequeue_hfe_widget_assets() {
+
+	/**
+	 * Whether to drop HFE's unconditional widget stylesheets.
+	 *
+	 * @param bool $drop Default true.
+	 */
+	if ( ! apply_filters( 'glm_dequeue_hfe_assets', true ) ) {
+		return;
+	}
+
+	foreach ( glm_hfe_widget_handles() as $handle ) {
+		wp_dequeue_style( $handle );
+		wp_deregister_style( $handle );
+	}
+}
+
+/*
+ * Hooked to wp_print_styles, not wp_enqueue_scripts.
+ *
+ * HFE enqueues on `elementor/frontend/after_register_scripts`, which fires
+ * after wp_enqueue_scripts has finished — so dequeuing there ran too early
+ * and had no effect. wp_print_styles is the last point before output.
+ */
+add_action( 'wp_print_styles', 'glm_dequeue_hfe_widget_assets', 100 );
+
+/**
+ * The HFE stylesheet handles we drop.
+ *
+ * Shared with the audit so the two cannot disagree.
+ *
+ * @return string[]
+ */
+function glm_hfe_widget_handles() {
+	return array(
+		'hfe-widgets-style',
+		'hfe-elementor-icons',
+		'hfe-icons-list',
+		'hfe-social-icons',
+		'hfe-social-share-icons-brands',
+		'hfe-social-share-icons-fontawesome',
+		'hfe-nav-menu-icons',
+	);
+}
