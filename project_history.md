@@ -6,6 +6,62 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-29 — Header switched to glm_nav(); HFE widget assets dequeued
+
+**Type:** `feat` · **Branch:** `feat/nav-switch`
+
+Manual regression checklist passed, so the switch went ahead.
+
+### What changed
+
+- Header template now uses a `shortcode` widget containing `[glm_nav]`
+- HFE's `navigation-menu` widget removed from the header
+- HFE's unconditionally-enqueued widget stylesheets dequeued
+- Audit extended to fail if an HFE widget is added back while they are dequeued
+- Test pages removed
+
+### Asset impact — measured, not estimated
+
+Eight files, **222.9 KB**, no longer requested:
+
+| File | Bytes |
+|---|--:|
+| `header-footer-elementor/inc/widgets-css/frontend.css` | 83,015 |
+| `elementor/.../font-awesome/css/fontawesome.css` | 72,184 |
+| `header-footer-elementor/inc/js/frontend.js` | 33,934 |
+| `elementor/.../eicons/css/elementor-icons.min.css` | 22,258 |
+| `elementor/assets/css/widget-icon-list.min.css` | 10,255 |
+| `elementor/assets/css/widget-social-icons.min.css` | 5,110 |
+| `elementor/.../font-awesome/css/brands.css` | 732 |
+| `elementor/.../font-awesome/css/solid.css` | 727 |
+
+**Requests 53 → 45.** Net saving after `nav.js` (6.1 KB): **~217 KB per page**.
+
+The Font Awesome entries are not a loss — HFE was loading the **non-minified** copies alongside our own `.min.css` versions. Verified after dequeuing: all five social icons still render.
+
+### Two measurement errors caught during this work
+
+Both mine, both would have produced a wrong report:
+
+1. **Basename-keyed asset diff** reported only 33 KB saved. Several HFE handles point at files inside Elementor's directory, so basenames collided and hid seven removals. Re-measured by URL: 222.9 KB.
+2. **`contains(@class,"glm-nav__toggle")`** matched `glm-nav__toggle-sub` too, so the hamburger check "failed" while both buttons were correct.
+
+Same lesson as the earlier scraper and taxonomy-template bugs: the check needs verifying as much as the thing it checks.
+
+### One hook detail worth recording
+
+Dequeuing on `wp_enqueue_scripts` had **no effect**. HFE enqueues on `elementor/frontend/after_register_scripts`, which fires later. Moved to `wp_print_styles` priority 100 — the last point before output.
+
+### Verification
+
+Audit passes 10 of 11 (the three legal stubs remain, by design). Five templates return 200 with the new nav rendering and no PHP errors. `hfe-nav-menu` markup is gone from every page. Appearance → Menus unaffected: 11 items, 5 top level, 6 nested.
+
+### HFE remains installed
+
+It still provides the header/footer template system (**R6**). Only its widgets are unused, and only its widget CSS is dequeued — `hfe-style` (776 bytes) is deliberately kept.
+
+---
+
 ## 2026-07-29 — Text-editor fix + parallel glm_nav() implementation
 
 **Type:** `fix` / `feat` · **Branch:** `feat/glm-nav`

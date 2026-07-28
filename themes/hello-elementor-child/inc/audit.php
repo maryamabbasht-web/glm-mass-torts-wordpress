@@ -243,6 +243,39 @@ function glm_run_audit() {
 
 	/* ── Site-level ──────────────────────────────────────── */
 
+	/*
+	 * HFE widget assets are dequeued because no HFE widget is used. If one
+	 * is added back, its styling would be silently missing — so fail here
+	 * rather than let it be found visually.
+	 */
+	if ( function_exists( 'glm_hfe_widget_handles' ) && apply_filters( 'glm_dequeue_hfe_assets', true ) ) {
+
+		$hfe_widget_types = array(
+			'navigation-menu', 'hfe-site-title', 'hfe-site-tagline', 'site-logo',
+			'copyright', 'hfe-search-button', 'hfe-cart', 'hfe-nav-menu',
+			'page-title', 'hfe-post-info', 'hfe-scroll-to-top', 'hfe-breadcrumbs',
+		);
+
+		foreach ( glm_audit_documents() as $id => $label ) {
+			$raw  = get_post_meta( $id, '_elementor_data', true );
+			$tree = json_decode( is_string( $raw ) ? $raw : wp_json_encode( $raw ), true );
+
+			if ( ! is_array( $tree ) ) {
+				continue;
+			}
+
+			glm_audit_walk(
+				$tree,
+				function ( $el ) use ( $add, $label, $hfe_widget_types ) {
+					$t = $el['widgetType'] ?? '';
+					if ( $t && in_array( $t, $hfe_widget_types, true ) ) {
+						$add( 'ASSETS', "{$label} uses the HFE widget `{$t}`, but HFE's widget CSS is dequeued — it will render unstyled. Remove the widget, or filter glm_dequeue_hfe_assets to false." );
+					}
+				}
+			);
+		}
+	}
+
 	// R6 — header and footer must exist as templates.
 	foreach ( array( 'type_header' => 'header', 'type_footer' => 'footer' ) as $type => $label ) {
 		$found = get_posts(
