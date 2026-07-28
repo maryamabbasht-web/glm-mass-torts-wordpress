@@ -101,6 +101,7 @@ require_once GLM_DIR . '/inc/elementor-sections.php';
 require_once GLM_DIR . '/inc/pages.php';
 require_once GLM_DIR . '/inc/elementor-header-footer.php';
 require_once GLM_DIR . '/inc/forms.php';
+require_once GLM_DIR . '/inc/nav-menu.php';
 require_once GLM_DIR . '/inc/integrations.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {

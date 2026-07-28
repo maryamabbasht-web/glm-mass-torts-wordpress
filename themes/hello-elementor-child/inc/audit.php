@@ -206,6 +206,18 @@ function glm_run_audit() {
 			$add( 'R9', 'components.css — the Elementor neutralisation layer is missing; Elementor kit defaults will override the design system' );
 		}
 
+		/*
+		 * 1b. The reset must NEVER target a widget root.
+		 *
+		 * Elementor styles `.elementor-widget-text-editor` — the root —
+		 * which is the same element GLM classes sit on. Resetting there
+		 * out-specifies our own component rules and silently suppresses
+		 * them. Invariant #2 in docs/elementor-compatibility.md.
+		 */
+		if ( preg_match( '/^html \.elementor-widget-[a-z-]+\s*[,{]\s*$/m', $css, $root_reset ) ) {
+			$add( 'R9', 'components.css — the reset targets a widget ROOT (`' . trim( $root_reset[0], " ,{\n" ) . '`); it will suppress GLM component rules. Prefix those rules instead.' );
+		}
+
 		// 2. Anything touching Elementor markup needs the prefix.
 		preg_match_all( '/^([^{}\n\/]*\.elementor-[^{}\n]*)[,{]\s*$/m', $css, $sel );
 
