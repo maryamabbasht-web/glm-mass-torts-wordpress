@@ -5,36 +5,73 @@
    No raw hex, no arbitrary px (learning.md R1, R9).
 
    -------------------------------------------------------------
-   WHY SOME SELECTORS START WITH `html`
+   ONE SOURCE OF TRUTH — HOW ELEMENTOR IS NEUTRALISED
    -------------------------------------------------------------
-   Not a typo, and please do not "tidy" it away.
+   Elementor ships its own design system and it CANNOT be removed.
+   Verified three ways: clearing system_typography has no effect,
+   clearing every global makes Elementor restore the four slots,
+   and defining font-family alone still leaves font-size defined.
 
-   Elementor writes its kit defaults into a per-section CSS file
-   for every widget type on the page:
+   It always writes kit defaults into a per-section CSS file for
+   every widget type on the page:
 
        .elementor-widget-heading .elementor-heading-title { … }
        .elementor-widget-button  .elementor-button        { … }
 
-   That is two classes — specificity (0,2,0) — and those files are
-   printed in the <body>, AFTER this stylesheet loads in the <head>.
+   Two classes — specificity (0,2,0) — printed in the <body>, AFTER
+   this stylesheet loads in the <head>. So an equal-specificity rule
+   of ours loses on document order alone. Silently: no error, the
+   styling simply never applies.
 
-   So a rule like `.glm-hero__title .elementor-heading-title` is
-   also (0,2,0): an exact tie, decided by document order, which
-   Elementor wins every time. That is what makes it look like
-   "Elementor is overriding everything".
+   Fighting that rule-by-rule is a truce, not an architecture. So
+   instead there is ONE neutralisation layer below, which resets
+   Elementor's widget defaults to `inherit`. After it:
 
-   Prefixing with `html` makes it (0,2,1) — one extra element in
-   the specificity — which beats (0,2,0) no matter what order the
-   files load in. Five characters, no !important, deterministic.
+     • Elementor's design system still exists but has NO EFFECT
+     • GLM tokens are the only thing that decides appearance
+     • component rules are plain .glm-* selectors, no prefixes
 
-   RULE: any selector that reaches into Elementor's own markup
-   (.elementor-heading-title, .elementor-button, .elementor-widget-*)
-   needs the `html` prefix. Selectors on our own .glm-* classes do
-   not — Elementor never styles those.
+   THE ONE THING TO KNOW
+   ---------------------
+   The reset works by INHERITANCE, so style the GLM wrapper class
+   and let Elementor's inner element inherit:
 
-   Deliberately NOT !important: that escalates, and the only way to
-   override an !important is another one. Specificity composes.
+       .glm-hero__title { font-size: var(--glm-h1); }   ✓ correct
+       .glm-hero__title .elementor-heading-title { … }  ✗ unneeded
+
+   Inheritable properties only: font-*, color, letter-spacing,
+   text-transform, line-height.
+
+   Properties that do NOT inherit — background, border, padding,
+   display — must still be set on Elementor's own element, and
+   those selectors keep the `html` prefix to out-specify (0,2,0).
+   That is now a handful of button rules rather than the whole file.
    ============================================================= */
+
+
+/* =============================================================
+   ELEMENTOR NEUTRALISATION LAYER
+   -------------------------------------------------------------
+   Do not add component styling here. This block exists only to
+   stop Elementor's kit defaults reaching the page.
+
+   `html` prefix = specificity (0,2,1), which beats Elementor's
+   (0,2,0) regardless of which stylesheet loads first.
+   ============================================================= */
+
+html .elementor-widget-heading .elementor-heading-title,
+html .elementor-widget-text-editor,
+html .elementor-widget-button .elementor-button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+/* Elementor zeroes heading margins itself; keep that after the reset. */
+html .elementor-widget-heading .elementor-heading-title {
+  margin: 0;
+}
 
 
 /* ── Tab bar ─────────────────────────────────────────────── */
@@ -615,8 +652,7 @@ html .glm-btn--outline .elementor-button:focus-visible {
   color: var(--glm-accent);
 }
 
-.glm-hero__title,
-html .glm-hero__title .elementor-heading-title {
+.glm-hero__title {
   font-family: var(--glm-font-display);
   font-size: var(--glm-h1);
   font-weight: 700;
@@ -949,8 +985,7 @@ html .glm-header__cta .elementor-button {
 
 /* ── Shared section furniture ────────────────────────────── */
 
-.glm-section-title,
-html .glm-section-title .elementor-heading-title {
+.glm-section-title {
   font-family: var(--glm-font-display);
   font-size: var(--glm-h2);
   font-weight: 700;
@@ -1138,8 +1173,7 @@ html .glm-section-title .elementor-heading-title {
   padding: 0;
 }
 
-.glm-divisions .glm-section-title,
-html .glm-divisions .glm-section-title .elementor-heading-title {
+.glm-divisions .glm-section-title {
   color: var(--glm-white);
 }
 
@@ -1192,8 +1226,7 @@ html .glm-divisions .glm-section-title .elementor-heading-title {
   margin-bottom: 1.25rem;
 }
 
-.glm-div-card__title,
-html .glm-div-card__title .elementor-heading-title {
+.glm-div-card__title {
   font-family: var(--glm-font-display);
   font-size: var(--glm-text-3xl);
   font-weight: 700;
@@ -1246,8 +1279,7 @@ html .glm-div-card__link .elementor-button:hover::after {
   padding: 0;
 }
 
-.glm-contact .glm-section-title,
-html .glm-contact .glm-section-title .elementor-heading-title {
+.glm-contact .glm-section-title {
   color: var(--glm-white);
 }
 
@@ -1255,8 +1287,7 @@ html .glm-contact .glm-section-title .elementor-heading-title {
   color: var(--glm-accent-light);
 }
 
-.glm-contact__sub,
-html .glm-contact__sub .elementor-heading-title {
+.glm-contact__sub {
   margin: 2rem 0 0.5rem;
   font-family: var(--glm-font-display);
   font-size: 1.75rem;

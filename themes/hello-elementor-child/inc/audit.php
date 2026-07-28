@@ -180,15 +180,17 @@ function glm_run_audit() {
 	/* ── Stylesheet ──────────────────────────────────────── */
 
 	/*
-	 * R9 — selectors that reach into Elementor's markup must out-specify
-	 * it, or they lose silently.
+	 * R9 — the single-source-of-truth architecture.
 	 *
-	 * Elementor emits `.elementor-widget-X .elementor-Y` at (0,2,0) into
-	 * per-section CSS printed in the <body>, after our stylesheet in the
-	 * <head>. An equal-specificity rule of ours therefore loses on order
-	 * alone — no error, the styling just never applies.
+	 * Elementor's design system cannot be removed, so it is neutralised by
+	 * one reset layer at the top of components.css. Everything below that
+	 * styles GLM wrapper classes and relies on inheritance.
 	 *
-	 * The `html` prefix makes ours (0,2,1), which wins regardless of order.
+	 * Three ways this can silently regress:
+	 *   1. the reset block gets deleted or edited away
+	 *   2. someone reaches into Elementor markup without the `html` prefix,
+	 *      producing a (0,2,0) tie that loses on load order
+	 *   3. !important creeps back in place of specificity
 	 */
 	$css_file = GLM_DIR . '/assets/css/components.css';
 
@@ -196,7 +198,15 @@ function glm_run_audit() {
 
 		$css = file_get_contents( $css_file ); // phpcs:ignore
 
-		// Selector lines that touch Elementor markup.
+		// 1. The neutralisation layer must still be there.
+		$has_reset = false !== strpos( $css, 'html .elementor-widget-heading .elementor-heading-title' )
+			&& preg_match( '/font\s*:\s*inherit/', $css );
+
+		if ( ! $has_reset ) {
+			$add( 'R9', 'components.css — the Elementor neutralisation layer is missing; Elementor kit defaults will override the design system' );
+		}
+
+		// 2. Anything touching Elementor markup needs the prefix.
 		preg_match_all( '/^([^{}\n\/]*\.elementor-[^{}\n]*)[,{]\s*$/m', $css, $sel );
 
 		foreach ( $sel[1] as $s ) {
@@ -206,10 +216,16 @@ function glm_run_audit() {
 			}
 		}
 
-		// !important should be rare and explained.
-		preg_match_all( '/^\s*([a-z-]+)\s*:[^;]*!important/m', $css, $imp );
-		if ( count( $imp[1] ) > 4 ) {
-			$add( 'R9', sprintf( 'components.css uses !important %d times — prefer specificity, which composes', count( $imp[1] ) ) );
+		// 3. Redundant now that the reset handles inheritance.
+		preg_match_all( '/^html (\.glm-[a-z_-]+) \.elementor-heading-title\s*[,{]/m', $css, $redundant );
+		foreach ( $redundant[1] as $s ) {
+			$add( 'R9', "components.css — `{$s} .elementor-heading-title` is redundant; style `{$s}` alone and let it inherit" );
+		}
+
+		// 4. !important should be rare and explained.
+		preg_match_all( '/^\s*[a-z-]+\s*:[^;]*!important/m', $css, $imp );
+		if ( count( $imp[0] ) > 4 ) {
+			$add( 'R9', sprintf( 'components.css uses !important %d times — prefer specificity, which composes', count( $imp[0] ) ) );
 		}
 	}
 

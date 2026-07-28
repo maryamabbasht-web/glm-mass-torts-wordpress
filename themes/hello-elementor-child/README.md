@@ -42,6 +42,47 @@ archive-tort.php       /mass-torts/ and /mass-torts/type/{slug}/
 
 ---
 
+## One styling system
+
+Elementor ships its own design system and **it cannot be removed** — verified three ways in `project_history.md`. It always emits `.elementor-widget-X .elementor-Y` at specificity **(0,2,0)** into per-section CSS printed in the `<body>`, after this stylesheet loads in the `<head>`. Equal-specificity rules of ours therefore lost on document order alone, silently.
+
+So it is **neutralised** by one reset block at the top of `components.css`:
+
+```css
+html .elementor-widget-heading .elementor-heading-title,
+html .elementor-widget-text-editor,
+html .elementor-widget-button .elementor-button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+```
+
+Elementor's system still exists but has **no effect**. GLM tokens are the single source of truth.
+
+### What this means when you write CSS
+
+**Style the GLM wrapper. Let Elementor's element inherit.**
+
+```css
+.glm-hero__title { font-size: var(--glm-h1); }      /* ✓ */
+.glm-hero__title .elementor-heading-title { … }     /* ✗ unnecessary */
+```
+
+| Property type | Where it goes |
+|---|---|
+| `font-*`, `color`, `letter-spacing`, `text-transform`, `line-height` | GLM wrapper class — plain selector, inherits |
+| `background`, `border`, `padding`, `display` | Elementor's element — **keep the `html` prefix** |
+
+> **Do not remove the `html` prefixes.** They add one element to the specificity, reaching (0,2,1), which beats Elementor's (0,2,0) regardless of load order. Not a typo.
+>
+> **Do not reach for `!important`.** It escalates — the only thing that overrides one is another one, including your own later rules and anything set in Elementor's panel. Specificity composes; `!important` doesn't.
+
+`wp glm audit` fails if the reset block goes missing, if a selector reaches into Elementor markup unprefixed, or if `!important` climbs above four uses.
+
+---
+
 ## Changing the styling of a section
 
 **Styling lives in CSS, not in Elementor's style panel.** Three layers — pick by how far the change should reach.
