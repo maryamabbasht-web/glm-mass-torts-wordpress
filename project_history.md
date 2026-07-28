@@ -6,6 +6,76 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-29 — Resolve the two-design-systems conflict
+
+**Type:** `refactor` · **Branch:** `refactor/single-styling-system`
+
+### The problem, as stated
+
+Two competing styling systems: the GLM design system (tokens, component classes, in git) and Elementor's built-in one (Global Colors, Global Typography, per-widget CSS). Elementor's frequently won, causing overridden typography, wrong colours, and escalating specificity workarounds — two sources of truth for one design.
+
+### What was tried and failed
+
+Before choosing an architecture, three attempts to remove Elementor's system outright:
+
+| Attempt | Result |
+|---|---|
+| Clear `system_typography` | No effect — values persist |
+| Clear every global | Elementor **restores** the four slots |
+| Define `font-family` only | `font-size` still defined (8 vars) |
+
+**Elementor's design system cannot be removed, emptied, or narrowed.** It is structural to the plugin. Recording this so nobody spends the afternoon rediscovering it.
+
+### Why the obvious alternative was rejected
+
+"Let Elementor own typography and colour, GLM own layout" fails on two counts:
+
+1. Elementor has **4 typography slots**; the design has **17 distinct type sizes**.
+2. Elementor's kit cannot reach the tort grid, results list, locations, forms, archive or single templates — **all theme PHP**. It structurally cannot cover the site.
+
+### The architecture chosen
+
+**Neutralise once, then style normally.** One reset layer at the top of `components.css` resets Elementor's widget defaults to `inherit`:
+
+```css
+html .elementor-widget-heading .elementor-heading-title,
+html .elementor-widget-text-editor,
+html .elementor-widget-button .elementor-button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+```
+
+Elementor's system still exists but has **no effect**. GLM tokens are the only thing deciding appearance.
+
+Component CSS then styles the **GLM wrapper class** and lets Elementor's inner element inherit. The previous per-rule `html` prefixes were removed from every heading rule.
+
+### Why some prefixes remain
+
+`background`, `border`, `padding` and `display` **do not inherit**, so they must be set on Elementor's own element and still need `html` to reach (0,2,1). That is now 11 button rules rather than the whole stylesheet — and 4 of the 15 remaining prefixed selectors are the reset block itself.
+
+### Why not !important
+
+It escalates. The only thing that overrides an `!important` is another one — including your own later rules and anything set in Elementor's panel. Specificity composes. The single remaining `!important` is on the form honeypot, with a comment: a visible honeypot is a broken form.
+
+### Enforcement
+
+`wp glm audit` now fails if:
+- the neutralisation layer is missing or edited away
+- any selector reaches into Elementor markup without the `html` prefix
+- a redundant `.glm-* .elementor-heading-title` selector reappears
+- `!important` count exceeds four
+
+### Verification
+
+CSS valid (207/207 braces, comments closed). All eight sections still render. Audit passes 10 of 11, the three outstanding items being the legal stubs.
+
+> **Still worth a human eye.** `font: inherit` is deliberately broad, and no automated check can confirm the site *looks* right. The design pass should catch anything the reset took that was actually wanted.
+
+---
+
 ## 2026-07-27 — Phase 6: audit command, editor guide, case evaluation form
 
 **Type:** `feat` · **Branches:** `feat/audit-and-guide`, `feat/case-form`

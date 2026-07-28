@@ -183,6 +183,55 @@ Built once via the free **Header Footer Elementor** plugin. One place to edit.
 
 > **Gotcha:** Elementor makes hide-on-mobile a single click, so this rule gets violated more than any other. Audit for it explicitly.
 
+#### R9a — One styling system: GLM tokens are authoritative, Elementor is neutralised
+
+*(Established 2026-07-29, after Elementor's design system repeatedly overrode the theme's.)*
+
+The project had **two competing design systems**: GLM tokens and component classes in the child theme, and Elementor's Global Colors / Global Typography emitted as per-widget CSS. Elementor kept winning, producing constant specificity conflicts.
+
+**Elementor's system cannot be removed.** Verified three ways:
+
+| Attempt | Result |
+|---|---|
+| Clear `system_typography` | No effect — values persist |
+| Clear every global | Elementor **restores** the four slots |
+| Define `font-family` only | `font-size` still defined |
+
+It will always emit `.elementor-widget-X .elementor-Y` at specificity **(0,2,0)**, into per-section CSS printed in the `<body>` — *after* the theme stylesheet in the `<head>`. An equal-specificity rule of ours therefore loses on document order alone, silently.
+
+**The architecture:** one neutralisation layer at the top of `components.css` resets Elementor's widget defaults to `inherit`. Everything below styles GLM wrapper classes and relies on inheritance.
+
+```css
+html .elementor-widget-heading .elementor-heading-title,
+html .elementor-widget-text-editor,
+html .elementor-widget-button .elementor-button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+```
+
+After that, Elementor's design system still exists but has **no effect**. GLM tokens are the only thing deciding appearance.
+
+**Writing CSS under this architecture:**
+
+```css
+.glm-hero__title { font-size: var(--glm-h1); }      /* ✓ style the wrapper */
+.glm-hero__title .elementor-heading-title { … }     /* ✗ unnecessary */
+```
+
+- **Inheritable properties** — `font-*`, `color`, `letter-spacing`, `text-transform`, `line-height` — style the GLM wrapper; the inner element inherits.
+- **Non-inheritable properties** — `background`, `border`, `padding`, `display` — must be set on Elementor's own element, and those selectors keep the **`html` prefix** to reach (0,2,1). Currently a handful of button rules.
+
+> **Gotcha:** the `html` prefix is not a typo and must not be tidied away. It adds one element to the specificity, which beats (0,2,0) regardless of load order.
+>
+> **Gotcha:** deliberately **not** `!important`. That escalates — the only thing that overrides an `!important` is another one, including your own future rules and anything set in Elementor's panel. Specificity composes.
+
+`wp glm audit` enforces all of this: it fails if the reset block disappears, if a selector reaches into Elementor markup without the prefix, if a redundant `.elementor-heading-title` selector reappears, or if `!important` count climbs above four.
+
+---
+
 #### R9 — Custom CSS goes in the child theme stylesheet
 With a comment explaining why it was needed. (Per-element Custom CSS is Pro-only, so circumstance enforces this for us.)
 
