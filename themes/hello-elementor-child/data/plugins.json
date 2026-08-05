@@ -1,0 +1,38 @@
+{
+  "_comment": [
+    "Pinned plugin versions. This project is version-sensitive: Elementor 4.x",
+    "removed the [elementor-template] shortcode and the classic per-widget style",
+    "controls, and HFE's nav widget emits selectors the design system cannot",
+    "out-specify. An unpinned auto-update can therefore break the site silently.",
+    "",
+    "`wp glm install` installs these exact versions. `wp glm audit` reports drift.",
+    "Bump a version here, test, then commit — the manifest is the record of what",
+    "the site was built against."
+  ],
+  "required": [
+    {
+      "slug": "elementor",
+      "name": "Elementor",
+      "version": "4.2.0",
+      "why": "Page builder. Sections, header and footer are generated as Elementor templates."
+    },
+    {
+      "slug": "advanced-custom-fields",
+      "name": "Advanced Custom Fields",
+      "version": "6.8.6",
+      "why": "Fields for the tort, location and result post types. Field groups sync from acf-json/."
+    },
+    {
+      "slug": "header-footer-elementor",
+      "name": "Header Footer Elementor",
+      "version": "2.9.2",
+      "why": "Provides the header/footer template system (R6). Its widgets are unused."
+    },
+    {
+      "slug": "contact-form-7",
+      "name": "Contact Form 7",
+      "version": "6.1.6",
+      "why": "Case evaluation form. Chosen because it does not persist submissions."
+    }
+  ]
+}

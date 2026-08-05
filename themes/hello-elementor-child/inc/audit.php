@@ -310,6 +310,31 @@ function glm_run_audit() {
 		$add( 'R14', 'No case evaluation form is registered; [glm_case_form] will render nothing. Run `wp glm build-form`.' );
 	}
 
+	/*
+	 * Plugin versions must match data/plugins.json.
+	 *
+	 * This project is version-sensitive in ways that fail silently: Elementor
+	 * 4.x removed [elementor-template] and the classic per-widget style
+	 * controls, and HFE's nav emits selectors at (0,6,1). An auto-update can
+	 * therefore break the site with nothing recording what it was built
+	 * against. The manifest is that record; this checks reality against it.
+	 */
+	if ( function_exists( 'glm_plugin_status' ) ) {
+		foreach ( glm_plugin_status() as $slug => $p ) {
+			switch ( $p['state'] ) {
+				case 'missing':
+					$add( 'PLUGINS', "{$slug} is not installed (pinned {$p['pinned']}). Run `wp glm install`." );
+					break;
+				case 'inactive':
+					$add( 'PLUGINS', "{$slug} is installed but not active. Run `wp glm install`." );
+					break;
+				case 'version-drift':
+					$add( 'PLUGINS', "{$slug} is {$p['installed']}, manifest pins {$p['pinned']}. Test, then either update data/plugins.json or run `wp glm install --rebuild`." );
+					break;
+			}
+		}
+	}
+
 	// R6 — header and footer must exist as templates.
 	foreach ( array( 'type_header' => 'header', 'type_footer' => 'footer' ) as $type => $label ) {
 		$found = get_posts(
@@ -358,8 +383,9 @@ function glm_cli_audit() {
 		'R8'     => 'No duplicated responsive variants',
 		'R9'     => 'Custom CSS in the theme',
 		'R11'    => 'Ship checklist',
-		'R14'    => 'Correct action is the easiest',
-		'ASSETS' => 'No external staging hotlinks',
+		'R14'     => 'Correct action is the easiest',
+		'ASSETS'  => 'No external staging hotlinks',
+		'PLUGINS' => 'Pinned plugin versions',
 	);
 
 	$total = 0;
