@@ -76,6 +76,95 @@ function glm_page_definitions() {
 		 * Each non-home page declares its own <h1> rather than promoting a
 		 * shared section's heading, which would give the home page two.
 		 */
+		/*
+		 * STATES
+		 *
+		 * Layout follows the supplied Figma frame. The frame comes from the
+		 * RCA file, so its copy is healthcare-reimbursement content (NSA,
+		 * PIP, medical revenue). That has been rewritten for Mass Torts —
+		 * the structure is the design's, the words are this firm's.
+		 *
+		 * Two sections of the frame are NOT built, deliberately:
+		 *   - Testimonials would need a testimonial post type, and new CPTs
+		 *     are out of scope.
+		 *   - Per-state "Read More" targets would need individual state
+		 *     pages, which are explicitly not in scope. Those links point
+		 *     at /locations/, which already lists every office by state.
+		 */
+		'states' => array(
+			'title'   => 'States',
+			'content' => array(
+
+				// ── Hero ────────────────────────────────────────────
+				'<section class="glm-states-hero">'
+					. '<div class="glm-states-hero__inner">'
+						. '<nav class="glm-breadcrumb" aria-label="Breadcrumb">'
+							. '<a href="/">Home</a><span aria-hidden="true">|</span>'
+							. '<span aria-current="page">States</span>'
+						. '</nav>'
+						. '<h1 class="glm-states-hero__title">States We Work In</h1>'
+						. '<p class="glm-states-hero__lead">Ged Lawyers represents injured clients in mass tort and class action litigation nationwide, with attorneys admitted across multiple jurisdictions and offices in Florida, Massachusetts, New Jersey and Michigan.</p>'
+					. '</div>'
+				. '</section>',
+
+				// ── Overlapping intro card ──────────────────────────
+				'<section class="glm-states-intro">'
+					. '<div class="glm-states-intro__card">'
+						. '<div class="glm-states-intro__main">'
+							. '<h2 class="glm-states-intro__title">Discover Where You Can Work With Ged Lawyers</h2>'
+							. '<ul class="glm-states-intro__list">'
+								. '<li><span class="glm-badge">MDL</span><span>Multidistrict litigation and class actions filed in federal courts nationwide.</span></li>'
+								. '<li><span class="glm-badge">OFFICES</span><span>Staffed offices in Florida, Massachusetts, New Jersey and Michigan.</span></li>'
+							. '</ul>'
+						. '</div>'
+						. '<div class="glm-states-intro__aside">'
+							. '<p class="glm-states-intro__aside-title">States<br>We Work In</p>'
+							. '<a class="glm-btn glm-btn--solid" href="/contact-us/">Meet With Us</a>'
+						. '</div>'
+					. '</div>'
+				. '</section>',
+
+				// ── State cards ─────────────────────────────────────
+				'<section class="glm-section-shell glm-states-grid-wrap">'
+					. '<h2 class="glm-section-title glm-states-grid__title">Offices in Four States</h2>'
+					. '<ul class="glm-states-grid">'
+						. '<li class="glm-state-card"><div class="glm-state-card__head"><h3>Florida</h3></div>'
+							. '<div class="glm-state-card__body"><p class="glm-state-card__name">Florida</p>'
+							. '<p class="glm-state-card__desc">Four offices — Boca Raton, Naples, Estero and Panama City — handling mass tort, defective product and catastrophic injury claims statewide.</p>'
+							. '<a class="glm-state-card__more" href="/locations/">Read More <span aria-hidden="true">&rarr;</span><span class="screen-reader-text"> about our Florida offices</span></a></div></li>'
+						. '<li class="glm-state-card"><div class="glm-state-card__head"><h3>Massachusetts</h3></div>'
+							. '<div class="glm-state-card__body"><p class="glm-state-card__name">Massachusetts</p>'
+							. '<p class="glm-state-card__desc">Offices in Boston and Rehoboth representing clients in pharmaceutical, medical device and toxic exposure litigation.</p>'
+							. '<a class="glm-state-card__more" href="/locations/">Read More <span aria-hidden="true">&rarr;</span><span class="screen-reader-text"> about our Massachusetts offices</span></a></div></li>'
+						. '<li class="glm-state-card"><div class="glm-state-card__head"><h3>New Jersey</h3></div>'
+							. '<div class="glm-state-card__body"><p class="glm-state-card__name">New Jersey</p>'
+							. '<p class="glm-state-card__desc">Our Ridgewood office serves clients across New Jersey in defective product, pharmaceutical and mass tort claims.</p>'
+							. '<a class="glm-state-card__more" href="/locations/">Read More <span aria-hidden="true">&rarr;</span><span class="screen-reader-text"> about our New Jersey office</span></a></div></li>'
+						. '<li class="glm-state-card"><div class="glm-state-card__head"><h3>Michigan</h3></div>'
+							. '<div class="glm-state-card__body"><p class="glm-state-card__name">Michigan</p>'
+							. '<p class="glm-state-card__desc">Our Southfield office represents Michigan clients in multidistrict litigation, class actions and product liability matters.</p>'
+							. '<a class="glm-state-card__more" href="/locations/">Read More <span aria-hidden="true">&rarr;</span><span class="screen-reader-text"> about our Michigan office</span></a></div></li>'
+					. '</ul>'
+				. '</section>',
+
+				// ── CTA band: reuses the existing case evaluation form ─
+				'<section class="glm-states-cta">'
+					. '<div class="glm-states-cta__inner">'
+						. '<div class="glm-states-cta__copy">'
+							. '<span class="glm-eyebrow">Get Started Today</span>'
+							. '<h2 class="glm-states-cta__title">Recover What You Are Owed</h2>'
+							. '<p>Pursue compensation through mass tort and class action litigation. No fee unless we win.</p>'
+							. '<dl class="glm-states-cta__facts">'
+								. '<div><dt>Telephone</dt><dd><a href="tel:8444433529">844-443-3529</a></dd></div>'
+								. '<div><dt>Office Hours</dt><dd>Mon&ndash;Sun, 24 hours</dd></div>'
+							. '</dl>'
+						. '</div>'
+						. '<div class="glm-states-cta__form">[glm_case_form]</div>'
+					. '</div>'
+				. '</section>',
+			),
+		),
+
 		'about' => array(
 			'title'   => 'About',
 			'content' => array(
@@ -287,8 +376,11 @@ function glm_build_primary_menu() {
 		}
 	}
 
-	// Remaining pages.
-	foreach ( array( 'about' => 'About', 'locations' => 'Locations', 'contact-us' => 'Contact' ) as $slug => $label ) {
+	/*
+	 * Remaining pages. Array order sets menu order, so States lands
+	 * directly after the Mass Torts dropdown and before About.
+	 */
+	foreach ( array( 'states' => 'States', 'about' => 'About', 'locations' => 'Locations', 'contact-us' => 'Contact' ) as $slug => $label ) {
 		$page = get_page_by_path( $slug );
 		if ( ! $page ) {
 			continue;
