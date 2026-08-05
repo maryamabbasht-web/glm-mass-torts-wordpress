@@ -67,6 +67,15 @@ function glm_template_header() {
 		'Navigation'
 	);
 
+	// Native <details> disclosure — no JS, no plugin. See inc/search.php.
+	$search = glm_widget(
+		'hdr.search',
+		'shortcode',
+		array( 'shortcode' => '[glm_search]' ),
+		'glm-header__search',
+		'Search'
+	);
+
 	$cta = glm_widget(
 		'hdr.cta',
 		'button',
@@ -79,11 +88,15 @@ function glm_template_header() {
 		'Phone CTA'
 	);
 
+	// Search and CTA are grouped so they stay together at the right edge
+	// while the nav takes the remaining space.
+	$actions = glm_container( 'hdr.actions', 'glm-header__actions', array( $search, $cta ), 'Actions' );
+
 	return array(
 		glm_container(
 			'hdr.root',
 			'glm-header',
-			array( glm_container( 'hdr.inner', 'glm-header__inner', array( $logo, $nav, $cta ), 'Inner' ) ),
+			array( glm_container( 'hdr.inner', 'glm-header__inner', array( $logo, $nav, $actions ), 'Inner' ) ),
 			'Header'
 		),
 	);

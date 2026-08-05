@@ -6,6 +6,51 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-07-29 — Header visual refinement to match the design reference
+
+**Type:** `style` · **Branch:** `style/header-refinement`
+
+Header only. Architecture untouched — still `glm_nav()`, no HFE widget, no new plugins.
+
+### Visual changes
+
+| # | Change | From | To |
+|---|---|---|---|
+| 1 | Header height | ~47px | **102px**, set directly |
+| 2 | Nav link colour | `--glm-accent-light` | `--glm-white` |
+| 3 | Active + hover | white | `--glm-cta` green |
+| 4 | Dropdown caret | filled triangle | thin chevron |
+| 5 | CTA shape | 2px radius | `--glm-radius-pill` |
+| 6 | Search | **absent** | added |
+| 7 | Nav type | 14px / 500 | 15px / 400 |
+| 8 | Logo height | 44px | 46px |
+| 9 | Stale HFE nav CSS | 2 rules | removed |
+
+### Height set directly, not derived
+
+`--glm-header-height: 102px` with `min-height` and flex centring, rather than padding arithmetic. Padding-derived height drifts whenever the logo or button size changes; an explicit height does not. `box-sizing: border-box` means the 3px accent border is inside the number.
+
+### Search uses `<details>`, not JavaScript
+
+`<summary>` already has button semantics, is keyboard focusable, responds to Enter and Space, and manages its own expanded state. So the disclosure needs **no JS and no ARIA of our own** — the platform supplies both. It posts to WordPress core search; no plugin.
+
+Verified: `/?s=hernia` returns *Hernia Mesh Litigation*.
+
+### Tokens
+
+Three component-scoped custom properties on `.glm-header` — `--glm-header-height`, `--glm-header-logo-h`, `--glm-header-gap` — following the `--glm-nav-breakpoint` precedent. No hardcoded colours, type or breakpoints introduced.
+
+### Deliberately not changed
+
+- **Menu labels.** The reference shows *Practice Area / States / Resources*; ours are *Home / Mass Torts / Locations*. That is content from Appearance → Menus, partly generated from the taxonomy — not a styling matter.
+- **The 3px accent border.** The reference screenshot has a devtools inspector overlay across the header edge, so its presence is unverifiable. Kept; one line to remove.
+
+### A third false negative from my own checks
+
+The CTA icon check reported FAIL. The icon was present — Elementor 4.x renders font icons as inline SVG (`e-fas-phone`), not `<i>`. Same failure mode as the earlier basename and `contains()` mistakes: the check was wrong, not the code.
+
+---
+
 ## 2026-07-29 — Header switched to glm_nav(); HFE widget assets dequeued
 
 **Type:** `feat` · **Branch:** `feat/nav-switch`
