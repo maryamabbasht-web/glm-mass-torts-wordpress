@@ -293,6 +293,40 @@ html .glm-stats .glm-stats__inner {
   background: var(--glm-white);
 }
 
+/* ── Homepage-only: fixed two-column featured grid ────────
+   Scoped to .glm-section-shell, which exists only in the homepage
+   definition. The archive and taxonomy templates render the same
+   grid outside that wrapper and keep the auto-fill behaviour above.
+
+   Only the overridden properties are restated — display, gap and
+   background all inherit from the rule above.
+
+   (0,2,0) beats the base (0,1,0), so no !important and no reliance
+   on source order. */
+
+.glm-section-shell .glm-tort-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* Featured cards span two columns by default, which in a two-column
+   grid means one card per row — the opposite of what is wanted here.
+   Reset the span so they tile 2-up. */
+.glm-section-shell .glm-tort-card--featured {
+  grid-column: span 1;
+
+  /* The default 1fr/280px split assumes a full-width card. At half
+     width the stat panel would leave roughly 150px for the title and
+     copy, so it stacks instead — the same treatment the card already
+     gets below 900px. */
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 900px) {
+  .glm-section-shell .glm-tort-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 
 /* ── Card ────────────────────────────────────────────────── */
 
