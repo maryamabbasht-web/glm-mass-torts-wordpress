@@ -46,7 +46,7 @@ function glm_brand_assets() {
 			'option' => 'site_icon',
 		),
 		'states-hero' => array(
-			'file'   => 'states-hero',
+			'file'   => 'state_banner',
 			'title'  => 'States page banner',
 			'alt'    => '', // Decorative: the hero already carries its heading.
 			'option' => 'glm_states_hero_id',
@@ -123,7 +123,8 @@ function glm_import_brand_asset( $key, array $def ) {
 		return array( 'missing from brand/', 0 );
 	}
 
-	// Remove any previous import of this asset.
+	$hash = md5_file( $src );
+
 	$previous = get_posts(
 		array(
 			'post_type'      => 'attachment',
@@ -134,6 +135,26 @@ function glm_import_brand_asset( $key, array $def ) {
 			'meta_value'     => $key,             // phpcs:ignore
 		)
 	);
+
+	/*
+	 * Skip untouched files.
+	 *
+	 * Without this, every run deleted and re-imported, so the attachment
+	 * ID changed each time — and glm_logo_id is baked into the stored
+	 * header template, which then pointed at a deleted attachment. Running
+	 * the import twice would silently break the header logo.
+	 *
+	 * Comparing a content hash makes re-running genuinely idempotent: the
+	 * ID is stable unless the file itself changed.
+	 */
+	if ( $previous ) {
+		$existing = (int) $previous[0];
+		if ( get_post_meta( $existing, '_glm_brand_hash', true ) === $hash ) {
+			update_option( $def['option'], $existing );
+			return array( 'unchanged', $existing );
+		}
+	}
+
 	foreach ( $previous as $old ) {
 		wp_delete_attachment( $old, true );
 	}
@@ -157,6 +178,7 @@ function glm_import_brand_asset( $key, array $def ) {
 	}
 
 	update_post_meta( $id, '_glm_brand_key', $key );
+	update_post_meta( $id, '_glm_brand_hash', $hash );
 
 	if ( '' !== $def['alt'] ) {
 		update_post_meta( $id, '_wp_attachment_image_alt', $def['alt'] );
