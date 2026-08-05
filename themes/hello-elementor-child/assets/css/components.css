@@ -1672,15 +1672,7 @@ html .glm-footer__divisions a:focus-visible {
    been imported — so the hero is never broken by a missing file. */
 .glm-states-hero {
   padding: calc(var(--glm-section-y) * 1.4) var(--glm-section-x) calc(var(--glm-section-y) * 3);
-  background-color: var(--glm-primary);
-  background-image:
-    linear-gradient(
-      100deg,
-      var(--glm-surface-deep) 0%,
-      rgba(32, 30, 107, 0.86) 45%,
-      rgba(32, 30, 107, 0.5) 100%
-    ),
-    var(--glm-states-hero-image, none);
+  background-image:var(--glm-states-hero-image);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
