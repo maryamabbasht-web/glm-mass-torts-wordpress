@@ -97,6 +97,52 @@ html .elementor-widget-heading .elementor-heading-title {
 }
 
 
+/* ── Container direction ─────────────────────────────────
+   A THIRD conflict mechanism, different from the two above.
+
+   Elementor lays containers out through a custom property, not a
+   plain declaration:
+
+     .e-con.e-flex      { --flex-direction: column; }      (0,2,0)
+     .e-con-full.e-flex { flex-direction: var(--flex-direction); }  (0,2,0)
+
+   So `.glm-header__inner { flex-direction: row }` at (0,1,0) never
+   had a chance — it loses to the consumer rule on specificity, and
+   the real decision was made by the variable anyway.
+
+   Fighting the consumer would mean out-specifying every rule that
+   reads the variable. Setting the VARIABLE instead is one
+   declaration, and every consumer picks it up.
+
+   `html .glm-block .glm-block__element` = (0,2,1). Ties Elementor
+   on classes, wins on the extra element. No !important, no
+   dependency on Elementor's own class names.
+
+   NO LEAKAGE: custom properties inherit, but Elementor resets
+   `--flex-direction: initial` on EVERY .elementor-element — widgets
+   included — and a directly-applied declaration always beats an
+   inherited one. So this reaches only the elements named here.
+
+   All container direction is set in this one block. Do not add
+   `flex-direction` to these classes elsewhere; it will silently
+   lose and mislead the next reader. */
+
+html .glm-header .glm-header__inner,
+html .glm-header .glm-header__actions,
+html .glm-hero .glm-hero__actions,
+html .glm-stats .glm-stats__inner {
+  --flex-direction: row;
+}
+
+/* Stats stack below the breakpoint — same mechanism, same
+   specificity, so it cleanly overrides the rule above. */
+@media (max-width: 900px) {
+  html .glm-stats .glm-stats__inner {
+    --flex-direction: column;
+  }
+}
+
+
 /* ── Tab bar ─────────────────────────────────────────────── */
 
 .glm-tort-tabs {
@@ -1128,14 +1174,16 @@ html .glm-hero__lead {
   background: var(--glm-primary);
   border-bottom: 3px solid var(--glm-accent);
   box-shadow: 0 2px 20px rgba(11, 25, 41, 0.12);
+    justify-content: center;
 }
 
+/* Direction is set in the neutralisation layer — see "Container
+   direction". Adding flex-direction here would silently lose. */
 .glm-header__inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--glm-header-gap);
-  flex-direction: row;
   width: 100%;
   max-width: var(--glm-container);
   margin: 0 auto;
@@ -1161,7 +1209,6 @@ html .glm-hero__lead {
 
 .glm-header__actions {
   display: flex;
-  flex-direction: row;
   align-items: center;
   gap: 1.25rem;
   flex-shrink: 0;
@@ -1799,9 +1846,7 @@ html .glm-contact__lead p {
 
 @media (max-width: 900px) {
 
-  .glm-stats__inner {
-    flex-direction: column;
-  }
+  /* Direction handled in the neutralisation layer. */
 
   .glm-stat {
     border-right: none;
