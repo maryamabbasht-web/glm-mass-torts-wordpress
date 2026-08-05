@@ -857,7 +857,7 @@ html .glm-hero__lead {
 .glm-nav__list {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -865,16 +865,18 @@ html .glm-hero__lead {
 
 .glm-nav__item {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .glm-nav__link {
   display: block;
-  padding: 0.5rem 0.875rem;
+  padding: 0.5rem 0.75rem;
   font-family: var(--glm-font-body);
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  color: var(--glm-accent-light);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  color: var(--glm-white);
   text-decoration: none;
   border-radius: var(--glm-radius);
   transition: color 0.2s, background 0.2s;
@@ -882,11 +884,12 @@ html .glm-hero__lead {
 
 .glm-nav__link:hover,
 .glm-nav__link:focus-visible {
-  color: var(--glm-white);
+  color: var(--glm-cta);
 }
 
+/* The reference shows the active item in the CTA green. */
 .glm-nav__item.is-current > .glm-nav__link {
-  color: var(--glm-white);
+  color: var(--glm-cta);
 }
 
 /* ── Submenu toggle (a real button, sibling to the link) ── */
@@ -895,31 +898,35 @@ html .glm-hero__lead {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.75rem;
+  width: 1.25rem;
   height: 1.75rem;
+  margin-left: -0.5rem;
   padding: 0;
   background: none;
   border: none;
-  color: var(--glm-accent-light);
+  color: var(--glm-white);
   cursor: pointer;
 }
 
 .glm-nav__toggle-sub:hover,
-.glm-nav__toggle-sub:focus-visible {
-  color: var(--glm-white);
+.glm-nav__toggle-sub:focus-visible,
+.glm-nav__item--has-children:hover .glm-nav__toggle-sub {
+  color: var(--glm-cta);
 }
 
+/* Thin chevron rather than a filled triangle, matching the reference.
+   Two borders on a rotated square: lighter than an SVG per item. */
 .glm-nav__caret {
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid currentColor;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-0.125rem) rotate(45deg);
   transition: transform 0.2s;
 }
 
 .glm-nav__toggle-sub[aria-expanded="true"] .glm-nav__caret {
-  transform: rotate(180deg);
+  transform: translateY(0.0625rem) rotate(225deg);
 }
 
 /* ── Submenu ─────────────────────────────────────────────── */
@@ -1100,11 +1107,24 @@ html .glm-hero__lead {
 
 /* ── Site header ─────────────────────────────────────────── */
 
+/* Component-scoped tokens: header proportions live here so they can be
+   tuned in one place rather than scattered through the rules below. */
 .glm-header {
+  /* Reference measures 102px total. box-sizing is border-box, so the
+     3px accent border is inside that number — set the height directly
+     rather than deriving it from padding, which drifts as the logo or
+     button sizes change. */
+  --glm-header-height: 102px;
+  --glm-header-logo-h: 46px;
+  --glm-header-gap: 2rem;
+
   position: sticky;
   top: 0;
   z-index: 100;
-  padding: 0 1.875rem;
+  display: flex;
+  align-items: center;
+  min-height: var(--glm-header-height);
+  padding: 0 var(--glm-section-x);
   background: var(--glm-primary);
   border-bottom: 3px solid var(--glm-accent);
   box-shadow: 0 2px 20px rgba(11, 25, 41, 0.12);
@@ -1114,49 +1134,188 @@ html .glm-hero__lead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
+  gap: var(--glm-header-gap);
   flex-direction: row;
+  width: 100%;
   max-width: var(--glm-container);
   margin: 0 auto;
   padding: 0;
 }
 
+.glm-header__logo {
+  flex-shrink: 0;
+}
+
 .glm-header__logo img {
   display: block;
   width: auto;
-  max-height: 44px;
+  max-height: var(--glm-header-logo-h);
 }
 
+/* Nav takes the space between logo and actions, sitting centre-left
+   as in the reference rather than pushed hard right. */
 .glm-header__nav {
   flex: 1;
+  justify-content: flex-start;
 }
 
-/* HFE's nav menu markup */
-.glm-header__nav .hfe-nav-menu__layout-horizontal .menu-item a.hfe-menu-item,
-.glm-header__nav .hfe-nav-menu a {
-  font-family: var(--glm-font-body);
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  color: var(--glm-accent-light);
+.glm-header__actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 1.25rem;
+  flex-shrink: 0;
+  padding: 0;
+  width: auto;
 }
 
-.glm-header__nav .hfe-nav-menu a:hover,
-.glm-header__nav .hfe-nav-menu a:focus-visible {
-  color: var(--glm-white);
-}
-
+/* Pill CTA with the phone icon, per the reference. */
 html .glm-header__cta .elementor-button {
   white-space: nowrap;
-  padding: 0.625rem 1.375rem;
+  padding: 0.8125rem 1.625rem;
+  border-radius: var(--glm-radius-pill);
+  font-size: var(--glm-text-sm);
+  letter-spacing: 0.4px;
+  text-transform: none;
 }
 
+html .glm-header__cta .elementor-button .elementor-button-icon {
+  font-size: 0.9em;
+}
+
+
+/* ── Header search (native <details> disclosure) ─────────── */
+
+.glm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.glm-search__disclosure {
+  position: relative;
+}
+
+.glm-search__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.25rem;
+  color: var(--glm-white);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.2s, color 0.2s;
+
+  /* Remove the native disclosure triangle. */
+  list-style: none;
+}
+
+.glm-search__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.glm-search__toggle::marker {
+  content: '';
+}
+
+.glm-search__toggle:hover,
+.glm-search__disclosure[open] .glm-search__toggle {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.glm-search__toggle:focus-visible {
+  outline: 2px solid var(--glm-accent-light);
+  outline-offset: 2px;
+}
+
+.glm-search__form {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: stretch;
+  min-width: 280px;
+  padding: 0.5rem;
+  background: var(--glm-white);
+  border-top: 3px solid var(--glm-accent);
+  border-radius: 0 0 var(--glm-radius-md) var(--glm-radius-md);
+  box-shadow: 0 12px 40px rgba(11, 25, 41, 0.18);
+}
+
+.glm-search__field {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--glm-font-body);
+  font-size: var(--glm-text-sm);
+  color: var(--glm-ink);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.glm-search__submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  font-size: 1rem;
+  color: var(--glm-white);
+  background: var(--glm-accent);
+  border: none;
+  border-radius: var(--glm-radius);
+  cursor: pointer;
+}
+
+.glm-search__submit:hover,
+.glm-search__submit:focus-visible {
+  filter: brightness(1.1);
+}
+
+
 @media (max-width: 900px) {
+
   .glm-header {
-    padding: 0 1.25rem;
+    --glm-header-height: 72px;
+    --glm-header-logo-h: 36px;
+    --glm-header-gap: 1rem;
+    padding: 0 var(--glm-section-x-sm);
   }
-  .glm-header__logo img {
-    max-height: 36px;
+
+  /* Order at mobile: logo · search + CTA · hamburger.
+     The nav stops taking the free space so the hamburger sits at the
+     right edge rather than floating in the middle. */
+  .glm-header__nav {
+    flex: 0 0 auto;
+    order: 3;
+  }
+
+  .glm-header__actions {
+    order: 2;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  /* The mobile panel must span the whole header, not just the width of
+     the hamburger. Dropping position:relative here lets it resolve
+     against .glm-header, which is sticky and therefore positioned. */
+  .glm-nav {
+    position: static;
+  }
+
+  html .glm-header__cta .elementor-button {
+    padding: 0.625rem 1.125rem;
+    font-size: var(--glm-text-xs);
+  }
+
+  .glm-search__form {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: min(280px, calc(100vw - 3rem));
   }
 }
 
