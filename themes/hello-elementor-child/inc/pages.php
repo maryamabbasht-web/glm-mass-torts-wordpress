@@ -31,7 +31,37 @@ function glm_page_definitions() {
 				'[glm_section slug="stats"]',
 				'[glm_section slug="about"]',
 				'[glm_section slug="divisions"]',
-				'[glm_tort_grid tabs="no" featured="yes" heading="no"]',
+
+				/*
+				 * HOMEPAGE-ONLY tort block.
+				 *
+				 * Deliberately inline here rather than in the shared
+				 * glm_tort_grid component or a section template: the
+				 * archive and taxonomy pages render the same grid with
+				 * their own headings, and must not inherit this one.
+				 *
+				 * Reuses .glm-eyebrow and .glm-section-title unchanged —
+				 * the same classes the About and Divisions sections use,
+				 * so typography and colour stay in the token system with
+				 * no new styles.
+				 *
+				 * .glm-section-shell wraps the heading AND the grid so
+				 * both share the container width and section padding of
+				 * the surrounding sections. Without it the grid runs
+				 * full-bleed and the heading would not line up with
+				 * anything.
+				 *
+				 * Note: heading="yes" on the shortcode refers to the
+				 * per-category dark header bars, not this heading. It
+				 * has no effect on a featured grid, which has no
+				 * category term.
+				 */
+				'<div class="glm-section-shell">'
+					. '<span class="glm-eyebrow">Active Litigation</span>'
+					. '<h2 class="glm-section-title">Featured Mass Torts.<br><em>Filing Now.</em></h2>'
+					. '[glm_tort_grid tabs="no" featured="yes" heading="yes"]'
+					. '</div>',
+
 				'[glm_section slug="contact"]',
 			),
 		),
