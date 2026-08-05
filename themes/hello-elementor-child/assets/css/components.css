@@ -1052,7 +1052,7 @@ html .glm-hero__lead {
   list-style: none;
   margin: 0;
   padding: 0.5rem 0;
-  min-width: 260px;
+  min-width: max-content;
   background: var(--glm-white);
   border-top: 3px solid var(--glm-accent);
   box-shadow: 0 12px 40px rgba(11, 25, 41, 0.18);
@@ -1567,7 +1567,7 @@ html .glm-footer__divisions a:focus-visible {
 
 .glm-stats__inner {
   display: flex;
-  flex-wrap: wrap;
+      flex-direction: row !important;
   max-width: var(--glm-container);
   margin: 0 auto;
   padding: 0;
