@@ -96,8 +96,21 @@ function glm_page_definitions() {
 		'locations' => array(
 			'title'   => 'Locations',
 			'content' => array(
-				'<h1 class="glm-page-title">Our Offices</h1>',
-				'[glm_locations]',
+				/*
+				 * Eyebrow + title + lead, matching the About and Divisions
+				 * pattern so the page opens the way every other section does
+				 * rather than starting cold on a bare heading.
+				 *
+				 * layout="cards" changes the MARKUP only — headings, icons
+				 * and the directions link. The footer keeps the default list.
+				 */
+				'<div class="glm-section-shell">'
+					. '<span class="glm-eyebrow">Nationwide Representation</span>'
+					. '<h1 class="glm-page-title">Our Offices</h1>'
+					. '<p class="glm-locations__lead">Eight offices across four states, with attorneys licensed nationwide. Call the office nearest you, or reach us on 844-443-3529 at any hour.</p>'
+					. '[glm_locations layout="cards"]'
+					. '</div>',
+
 				'[glm_section slug="contact"]',
 			),
 		),

@@ -188,11 +188,90 @@ function glm_results_shortcode() {
 add_shortcode( 'glm_results', 'glm_results_shortcode' );
 
 /**
- * [glm_locations] — offices, grouped by state.
+ * Address, safe for output.
  *
+ * The ACF field is a textarea with new_lines => br, so the STORED value
+ * already contains "<br />". The previous nl2br( esc_html() ) escaped that
+ * into visible "&lt;br /&gt;" text and then added a second break, so every
+ * address on the site showed the tag as literal characters.
+ *
+ * wp_kses with a <br>-only allowlist keeps the break and escapes anything
+ * else, which is safe whether the value arrives with tags or with newlines.
+ *
+ * @param string $address Raw field value.
  * @return string
  */
-function glm_locations_shortcode() {
+function glm_format_address( $address ) {
+	return wp_kses( (string) $address, array( 'br' => array() ) );
+}
+
+/**
+ * Address as a single line, for a maps query or an aria-label.
+ *
+ * @param string $address Raw field value.
+ * @return string
+ */
+function glm_address_oneline( $address ) {
+	$flat = preg_replace( '#<br\s*/?>#i', ', ', (string) $address );
+	$flat = wp_strip_all_tags( $flat );
+	return trim( preg_replace( '/\s+/', ' ', $flat ) );
+}
+
+/**
+ * Inline SVG icon.
+ *
+ * Inline rather than a font class: Font Awesome's `solid` stylesheet is not
+ * enqueued (only core + brands), so <i class="fas …"> would render nothing.
+ * Two paths cost less than another stylesheet.
+ *
+ * @param string $name pin|phone|arrow.
+ * @return string
+ */
+function glm_icon( $name ) {
+
+	$paths = array(
+		'pin'   => '<path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"></path><circle cx="12" cy="10" r="2.5"></circle>',
+		'phone' => '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"></path>',
+		'arrow' => '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
+	);
+
+	if ( ! isset( $paths[ $name ] ) ) {
+		return '';
+	}
+
+	return '<svg class="glm-icon" viewBox="0 0 24 24" width="1em" height="1em" fill="none"'
+		. ' stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"'
+		. ' aria-hidden="true" focusable="false">' . $paths[ $name ] . '</svg>';
+}
+
+/**
+ * [glm_locations] — offices, grouped by state.
+ *
+ * ONE PARAMETER, AND ONLY FOR MARKUP
+ *
+ * There are exactly two call sites: this page and the site footer. Their
+ * visual differences are handled by contextual CSS (`.glm-footer__offices`),
+ * which needs no parameter at all.
+ *
+ * `layout` exists because two differences are STRUCTURAL, and CSS cannot
+ * express either:
+ *
+ *   1. Heading levels. The page needs <h2>/<h3> beneath its <h1>. The
+ *      footer already sits under an <h4>, so emitting <h2> there would
+ *      send the document outline backwards.
+ *   2. The directions link. Useful on the page; in the footer it would
+ *      add eight outbound links to every page on the site.
+ *
+ *   layout="list"  (default) — footer: divs, no directions
+ *   layout="cards"           — page:   headings, icons, directions
+ *
+ * @param array $atts Shortcode attributes.
+ * @return string
+ */
+function glm_locations_shortcode( $atts ) {
+
+	$atts = shortcode_atts( array( 'layout' => 'list' ), $atts, 'glm_locations' );
+	$cards = ( 'cards' === $atts['layout'] );
 
 	$offices = get_posts(
 		array(
@@ -215,32 +294,65 @@ function glm_locations_shortcode() {
 	}
 
 	ob_start();
-	echo '<div class="glm-locations">';
+
+	printf( '<div class="glm-locations%s">', $cards ? ' glm-locations--cards' : '' );
 
 	foreach ( $by_state as $state => $group ) {
-		printf( '<div class="glm-loc-state"><div class="glm-loc-state__name">%s</div><div class="glm-loc-state__offices">', esc_html( $state ) );
+
+		echo '<div class="glm-loc-state">';
+
+		printf(
+			$cards ? '<h2 class="glm-loc-state__name">%s</h2>' : '<div class="glm-loc-state__name">%s</div>',
+			esc_html( $state )
+		);
+
+		echo '<div class="glm-loc-state__offices">';
 
 		foreach ( $group as $o ) {
-			$phone  = glm_field( 'phone', $o->ID );
-			$phone2 = glm_field( 'phone_secondary', $o->ID );
+
+			$address = glm_field( 'address', $o->ID );
+			$phone   = glm_field( 'phone', $o->ID );
+			$phone2  = glm_field( 'phone_secondary', $o->ID );
 
 			echo '<div class="glm-office">';
-			printf( '<div class="glm-office__city">%s</div>', esc_html( $o->post_title ) );
-			printf( '<div class="glm-office__address">%s</div>', nl2br( esc_html( glm_field( 'address', $o->ID ) ) ) );
 
-			if ( $phone ) {
+			printf(
+				$cards ? '<h3 class="glm-office__city">%s</h3>' : '<div class="glm-office__city">%s</div>',
+				esc_html( $o->post_title )
+			);
+
+			printf(
+				'<div class="glm-office__address">%s%s</div>',
+				$cards ? glm_icon( 'pin' ) : '',
+				glm_format_address( $address )
+			);
+
+			foreach ( array_filter( array( $phone, $phone2 ) ) as $p ) {
 				printf(
-					'<a class="glm-office__phone" href="tel:%s">%s</a>',
-					esc_attr( preg_replace( '/[^0-9+]/', '', $phone ) ),
-					esc_html( $phone )
+					'<a class="glm-office__phone" href="tel:%s">%s%s</a>',
+					esc_attr( preg_replace( '/[^0-9+]/', '', $p ) ),
+					$cards ? glm_icon( 'phone' ) : '',
+					esc_html( $p )
 				);
 			}
-			if ( $phone2 ) {
-				printf(
-					'<a class="glm-office__phone" href="tel:%s">%s</a>',
-					esc_attr( preg_replace( '/[^0-9+]/', '', $phone2 ) ),
-					esc_html( $phone2 )
-				);
+
+			/*
+			 * Directions built from the address already on record — no new
+			 * field, no change to how offices are managed.
+			 */
+			if ( $cards ) {
+				$query = glm_address_oneline( $address );
+				if ( $query ) {
+					printf(
+						'<a class="glm-office__directions" href="https://www.google.com/maps/search/?api=1&query=%s"'
+							. ' target="_blank" rel="noopener noreferrer">%s<span class="screen-reader-text">%s</span>%s</a>',
+						rawurlencode( $o->post_title . ', ' . $query ),
+						esc_html__( 'Get directions', 'glm' ),
+						/* translators: %s: office city. */
+						esc_html( sprintf( __( 'to our %s office', 'glm' ), $o->post_title ) ),
+						glm_icon( 'arrow' )
+					);
+				}
 			}
 
 			echo '</div>';
