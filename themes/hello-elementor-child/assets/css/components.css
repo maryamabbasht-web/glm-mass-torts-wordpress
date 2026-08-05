@@ -544,7 +544,16 @@ html .glm-stats .glm-stats__inner {
 
 /* ── Archive: /mass-torts/ ───────────────────────────────── */
 
-.glm-archive {
+/* Two names, one rule — no duplicated declarations.
+   `.glm-archive` is the tort archive template's wrapper.
+   `.glm-section-shell` is the same layout used by page content that
+   needs to line up with the section templates: container width plus
+   standard section padding. Added for the homepage tort block, which
+   otherwise ran full-bleed while every neighbouring section was
+   constrained. Kept as one rule so the two cannot drift; split them
+   if the archive ever needs different spacing. */
+.glm-archive,
+.glm-section-shell {
   max-width: var(--glm-container);
   margin: 0 auto;
   padding: var(--glm-section-y) var(--glm-section-x);
