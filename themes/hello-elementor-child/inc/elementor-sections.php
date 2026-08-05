@@ -442,7 +442,30 @@ function glm_section_contact() {
 							'glm-contact__lead',
 							'Lead'
 						),
-						glm_container( 'contact.form', 'glm-contact__form', array(), 'Form goes here (Phase 5)' ),
+						/*
+						 * The case evaluation form.
+						 *
+						 * Inserted via [glm_case_form] rather than the CF7
+						 * shortcode directly: this template is stored in
+						 * postmeta, so a literal form ID would be baked in
+						 * and break the moment the form is rebuilt or the
+						 * site is set up on another environment. The
+						 * wrapper resolves the ID at render time.
+						 */
+						glm_container(
+							'contact.form',
+							'glm-contact__form',
+							array(
+								glm_widget(
+									'contact.form.cf7',
+									'shortcode',
+									array( 'shortcode' => '[glm_case_form]' ),
+									'',
+									'Case evaluation form'
+								),
+							),
+							'Form'
+						),
 					),
 					'Inner'
 				),
