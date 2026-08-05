@@ -307,6 +307,40 @@ function glm_provide_case_form() {
 add_filter( 'glm_case_form_shortcode', 'glm_provide_case_form' );
 
 /**
+ * [glm_case_form] — the case evaluation form, resolved at render time.
+ *
+ * WHY THIS INDIRECTION EXISTS
+ *
+ * The contact section is a stored Elementor template, so whatever shortcode
+ * it contains is baked into postmeta. Baking `[contact-form-7 id="117"]`
+ * would hardcode an ID that is environment-specific: rebuild the form, or
+ * run `glm build-form` on staging, and the number changes while the stored
+ * template still points at the old one — a silent empty section.
+ *
+ * This wrapper looks the ID up through the same filter single-tort.php
+ * uses, so the template stays valid across rebuilds and environments.
+ *
+ * @return string
+ */
+function glm_case_form_shortcode_tag() {
+
+	/** This filter is the single place the form is resolved. */
+	$markup = apply_filters( 'glm_case_form_shortcode', '' );
+
+	if ( ! $markup ) {
+		if ( current_user_can( 'edit_posts' ) ) {
+			return '<p style="padding:1rem;border:2px dashed #b91c1c;color:#b91c1c;">'
+				. 'Case evaluation form not found. Run <code>wp glm build-form</code>.</p>';
+		}
+		return '';
+	}
+
+	// The filter returns a CF7 shortcode, which needs its own pass.
+	return do_shortcode( $markup );
+}
+add_shortcode( 'glm_case_form', 'glm_case_form_shortcode_tag' );
+
+/**
  * WP-CLI: wp glm build-form [--force]
  */
 function glm_cli_build_form( $args, $assoc_args ) {

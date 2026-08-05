@@ -276,6 +276,40 @@ function glm_run_audit() {
 		}
 	}
 
+	/*
+	 * The contact section must actually contain a form.
+	 *
+	 * It shipped for two phases with an empty placeholder container
+	 * labelled "Form goes here (Phase 5)" — heading, sub-heading and
+	 * reassurance copy, then nothing. Four pages invited visitors to
+	 * "Tell Us About Your Case" with no way to do so, and every earlier
+	 * audit passed because no rule checked for it.
+	 */
+	$contact = get_posts(
+		array(
+			'post_type'      => 'elementor_library',
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'meta_key'       => '_glm_section_slug', // phpcs:ignore
+			'meta_value'     => 'contact',           // phpcs:ignore
+		)
+	);
+
+	if ( $contact ) {
+		$raw = get_post_meta( (int) $contact[0], '_elementor_data', true );
+		$raw = is_string( $raw ) ? $raw : wp_json_encode( $raw );
+
+		if ( false === strpos( $raw, 'glm_case_form' ) && false === strpos( $raw, 'contact-form-7' ) ) {
+			$add( 'R14', 'The contact section contains no form. It asks visitors to submit a case and gives them nothing to submit. Run `wp glm build-sections --force`.' );
+		}
+	}
+
+	// A resolvable form must exist for [glm_case_form] to render.
+	if ( shortcode_exists( 'glm_case_form' ) && ! apply_filters( 'glm_case_form_shortcode', '' ) ) {
+		$add( 'R14', 'No case evaluation form is registered; [glm_case_form] will render nothing. Run `wp glm build-form`.' );
+	}
+
 	// R6 — header and footer must exist as templates.
 	foreach ( array( 'type_header' => 'header', 'type_footer' => 'footer' ) as $type => $label ) {
 		$found = get_posts(
