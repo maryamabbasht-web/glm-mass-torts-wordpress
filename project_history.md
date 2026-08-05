@@ -6,6 +6,46 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-08-06 — `wp glm install`: one command from bare WordPress to a working site
+
+**Type:** `feat` · **Branch:** `feat/install-command`
+
+### What changed
+
+- Added `inc/install.php` — the `wp glm install` orchestrator
+- Added `data/plugins.json` — pinned versions for the four required plugins
+- Added a `PLUGINS` audit check for version drift
+- Rewrote the README's onboarding into four steps, plus a command reference
+
+### It orchestrates; it does not reimplement
+
+Every step delegates to a command that already existed. Onboarding previously meant knowing nine commands *and* the order they had to run in — an order with real dependencies that are invisible from the command names:
+
+- `build-pages` reads `tort_category` with `hide_empty => true`, so with no torts the menu silently gets no category items
+- `apply-kit` and `build-header-footer` both read `glm_logo_id`, so brand assets must land first
+
+Getting it wrong produces a site that looks built but is quietly missing pieces.
+
+### Safe by default, proven not asserted
+
+A plain `wp glm install` skips content importers when content exists and calls builders without `--force`. Verified by running it against the fully built site and comparing before/after: identical counts **and identical section fingerprints**. `--rebuild` is the only destructive path, and it refuses on a site declaring `WP_ENVIRONMENT_TYPE=production` without `--yes`.
+
+### Plugins pinned without Composer
+
+Elementor 4.2.0, ACF 6.8.6, HFE 2.9.2, CF7 6.1.6 — installed at those exact versions by WP-CLI, which the project already depends on. This project breaks *silently* on version drift: Elementor 4.x removed `[elementor-template]` and the classic style controls. The manifest is the record of what the site was built against; the audit reports drift.
+
+### Two real bugs found while building it
+
+**1. `launch => true` is unusable here.** Spawning a subprocess is the textbook way to pick up newly activated plugins. Every step failed with `Could not open input file: C:\Program` — WP-CLI builds the child command line without quoting the path to its own binary, and Studio's lives under `C:\Program Files\`. Switched to in-process, which brings a known limitation: a plugin activated during the run is not *loaded* in that process. Rather than half-build and emit confusing failures, the command stops after activating plugins and asks to be run once more. Only ever happens on a fresh site.
+
+**2. `--skip-plugins` is a WP-CLI global.** The originally specified flag name is reserved — WP-CLI intercepts it to skip *loading* plugins, so it never reaches the command, and it would leave Elementor and ACF unavailable, failing every build step in a way that looks like our bug. Renamed to `--skip-plugin-install`, and the command now detects the global and refuses with an explanation.
+
+### Deliberately out of scope
+
+No Docker, DDEV, Composer, CI or deployment. Studio remains the supported local environment.
+
+---
+
 ## 2026-07-29 — Header visual refinement to match the design reference
 
 **Type:** `style` · **Branch:** `style/header-refinement`

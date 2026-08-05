@@ -19,20 +19,15 @@ Converting a single long HTML reference file into a maintainable, multi-page Wor
 | 6 | Form, audit command, editor guide | ✅ Complete |
 | — | *Deferred:* migration to live, redirects, SEO | ⬜ Not started |
 
-### Rebuild the whole site from git
+### Build the whole site with one command
 
 ```bash
-studio wp glm apply-kit             # Elementor globals from theme tokens
-studio wp glm import-torts          # 40 torts
-studio wp glm import-content        # 4 results, 8 offices
-studio wp glm build-sections        # 5 section templates
-studio wp glm build-pages           # 7 pages + Primary menu
-studio wp glm build-header-footer   # header + footer
-studio wp glm build-form            # case evaluation form
-studio wp glm audit                 # check against the ruleset
+studio wp glm install
 ```
 
-Every one is idempotent, and the section builder **refuses to overwrite templates edited in Elementor** unless you pass `--overwrite-edited`.
+That orchestrates every build step in dependency order and produces a working site — 40 torts, 8 offices, 9 pages, header, footer and forms — from a bare WordPress.
+
+The individual commands still exist and can be run on their own; `install` simply calls them in the right order. See [Command reference](#command-reference).
 
 ### Audit status
 
@@ -209,11 +204,121 @@ The `Why:` line is required. It is greppable — `git log --grep="^Why:"` gives 
 
 ## Getting started
 
-The commit template is already wired to this repo. If you clone it fresh, re-apply:
+Four steps from nothing to a working site.
+
+**1. Clone**
 
 ```bash
+git clone git@github.com:maryamabbasht-web/glm-mass-torts-wordpress.git
+cd glm-mass-torts-wordpress
 git config --local commit.template .gitmessage
 ```
+
+**2. Create a site in WordPress Studio**
+
+*Add site* → name it → pick a location **outside OneDrive** (a WordPress install is tens of thousands of small files and OneDrive will sync-thrash on every page load).
+
+**3. Link the theme into it**
+
+```powershell
+New-Item -ItemType Junction `
+  -Path   "<studio-site>\wp-content\themes\hello-elementor-child" `
+  -Target "<repo>\themes\hello-elementor-child"
+```
+
+A junction rather than a symlink because it needs no administrator rights. On macOS or Linux use `ln -s`.
+
+```bash
+studio wp theme activate hello-elementor-child
+```
+
+**4. Build**
+
+```bash
+studio wp glm install
+```
+
+On a fresh site this installs the four pinned plugins, then asks you to run it **once more** so WordPress can load them — see [the two-pass note](#why-a-fresh-site-needs-two-passes). The second run builds everything.
+
+That's it. `studio status` gives you the URL and admin login.
+
+### Why a fresh site needs two passes
+
+The build steps run **in the same PHP process** as the command. On a fresh site the plugins are activated part way through that process — but PHP booted before they existed, so their `init` hooks have already passed. Elementor's classes and ACF's `update_field()` genuinely are not available yet.
+
+Rather than half-build a site and emit a pile of confusing failures, the command stops after activating plugins and tells you to run it again. It only ever happens once, on a genuinely fresh install.
+
+> **Why not spawn a subprocess?** That is the textbook fix and it does not work here: WP-CLI builds the child command line without quoting the path to its own binary, and Studio's lives under `C:\Program Files\…`. Every spawned step failed with `Could not open input file: C:\Program`.
+
+---
+
+## Command reference
+
+### `wp glm install`
+
+Orchestrates every other command in dependency order. Contains no build logic of its own.
+
+| Flag | What it does |
+|---|---|
+| *(none)* | **Safe.** Create-if-missing. Skips content importers when content already exists; calls builders without `--force`. Never overwrites editor content or Elementor edits. |
+| `--rebuild` | **Destructive.** Re-imports all content and rebuilds every template with `--force --overwrite-edited`, discarding Elementor edits. Refuses to run when the site declares `WP_ENVIRONMENT_TYPE=production` unless `--yes` is also given. |
+| `--skip-plugin-install` | Skips plugin installation; every other step runs. For hosts that manage plugins outside the repository. |
+| `--dry-run` | Prints the execution plan — including which steps would be skipped and why — and writes nothing. |
+| `--yes` | Confirms a `--rebuild` on a site declared as production. |
+
+> **Not `--skip-plugins`.** That is a **WP-CLI global flag** which stops WordPress loading plugins at all. It is intercepted before any command sees it, and using it here would leave Elementor and ACF unloaded, failing every build step in a way that looks like a bug in this project. The command detects it and refuses with an explanation.
+
+**Dependency order**, and why it is not arbitrary:
+
+1. Preflight — PHP ≥ 7.4, WP ≥ 6.4, uploads writable, correct theme active
+2. Plugins — installed and activated at pinned versions
+3. Rewrite rules flushed — 46 generated URLs depend on them
+4. `import-brand` — **must precede 4 and 8**, which read `glm_logo_id`
+5. `apply-kit`
+6. `import-torts` — **must precede 9**: the menu reads `tort_category` with `hide_empty => true`, so with no torts it gets no category items
+7. `import-content`
+8. `build-sections` · `build-form`
+9. `build-pages` · `build-header-footer`
+10. `audit` — reports, never fails the install
+
+Getting that order wrong produces a site that looks built but is quietly missing pieces, with nothing to say why.
+
+### Individual commands
+
+Each still works on its own. `install` calls exactly these.
+
+```bash
+studio wp glm import-brand          # logo, favicon, banner → Media Library
+studio wp glm apply-kit             # design tokens → Elementor globals
+studio wp glm import-torts          # 40 torts from data/torts.json
+studio wp glm import-content        # 8 offices, 4 results
+studio wp glm build-sections        # 5 Elementor section templates
+studio wp glm build-form            # CF7 case evaluation form
+studio wp glm build-pages           # 9 pages + Primary menu
+studio wp glm build-header-footer   # header + footer templates
+studio wp glm audit                 # check against the ruleset
+```
+
+All are idempotent. `build-sections` **refuses to overwrite templates edited in Elementor** unless given `--overwrite-edited`.
+
+### Plugin versions
+
+Pinned in `themes/hello-elementor-child/data/plugins.json`:
+
+| Plugin | Version |
+|---|---|
+| Elementor | 4.2.0 |
+| Advanced Custom Fields | 6.8.6 |
+| Header Footer Elementor | 2.9.2 |
+| Contact Form 7 | 6.1.6 |
+
+`wp glm install` installs exactly these. `wp glm audit` reports drift.
+
+> **Why pin.** This project is version-sensitive in ways that fail silently. Elementor 4.x removed the `[elementor-template]` shortcode and the classic per-widget style controls; HFE's nav widget emits selectors the design system cannot out-specify. An unattended update can break the site with nothing recording what it was built against.
+>
+> To upgrade: change the version here, run `wp glm install --rebuild`, test, then commit. The manifest is the record.
+
+---
 
 To see the rationale behind every change so far:
 
@@ -225,16 +330,9 @@ git log --grep="^Why:" --format='%h %s%n%b'
 
 ## Working on this site
 
-The Studio site lives at `C:\Users\MaryamAbbasNaqvi\Studio\glm-mass-torts` and its `wp-content/themes/hello-elementor-child` is a **directory junction** back to this repo. Edit here, WordPress sees it instantly.
+The theme folder in your Studio site is a **junction back to this repo** (set up in [Getting started](#getting-started)). Edit here, WordPress sees it instantly — no copying, no sync step.
 
-```powershell
-# Recreate the junction if it is ever lost
-New-Item -ItemType Junction `
-  -Path   "C:\Users\MaryamAbbasNaqvi\Studio\glm-mass-torts\wp-content\themes\hello-elementor-child" `
-  -Target "<repo>\themes\hello-elementor-child"
-```
-
-A junction rather than a symlink because it needs no administrator rights. Windows-only — on macOS or Linux use `ln -s`.
+CSS is versioned with `filemtime()`, so saving a stylesheet *is* the cache bust. No build step.
 
 ### Studio CLI
 
