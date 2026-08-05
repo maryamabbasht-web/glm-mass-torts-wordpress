@@ -1,66 +1,76 @@
-# brand/
+# brand/ — masters have moved
 
-**Put the logo files here.** This is the answer to "where do I add the logo file?"
+> **Put brand files here now:**
+>
+> ```
+> themes/hello-elementor-child/assets/brand/
+> ```
+>
+> Then run `studio wp glm import-brand`.
 
-```
-brand/
-├── logo.svg              Primary logo — preferred format
-├── logo.png              Raster fallback, 2x the largest display size
-├── logo-mark.svg         Monogram / icon-only version
-└── favicon.png           512×512, square
-```
-
-Drop the files in, tell me, and I import them into the WordPress Media Library with:
-
-```bash
-studio wp media import brand/logo.svg --title="GL Mass Torts Logo"
-```
+This folder is kept only as a signpost. The masters that used to live here are now inside the theme.
 
 ---
 
-## Why here and not straight into WordPress
+## Why they moved
 
-You *can* upload through **Media → Add New** in the admin, and that works. But the Media Library lives in `wp-content/uploads/`, which is **excluded from git** (repo-scope decision #4 — we do not version binary uploads).
+Two reasons, the second decisive:
 
-So if the logo only ever exists in the Media Library, it exists in exactly one place: a local SQLite site on one laptop.
+1. **Nothing under the theme could reach them.** `GLM_DIR` comes from `get_stylesheet_directory()`, which resolves through the junction to the WordPress install — so walking up from the theme lands in `wp-content/`, never in this repo.
 
-Keeping masters here means:
+2. **The theme is the only thing that deploys.** Assets sitting outside it would simply not exist on staging or production, no matter how correct the local paths were.
 
-- The source-of-truth files are version-controlled and travel with the repo
-- A rebuild on a fresh site re-imports them in one command
-- You can see when the logo changed, and what it changed from
+One location inside the theme works identically whether it is junctioned locally, copied, or deployed as a plain folder.
 
-The Media Library then holds a *working copy*, not the only copy.
+---
+
+## Adding or replacing an asset
+
+1. Drop the file in `themes/hello-elementor-child/assets/brand/`
+2. Run:
+
+```bash
+studio wp glm import-brand
+```
+
+Idempotent — matched on a `_glm_brand_key` meta value, so re-running replaces rather than piling up duplicates.
+
+### Expected files
+
+| Basename | Used for | Option set |
+|---|---|---|
+| `GL Logo` | Header logo | `glm_logo_id` |
+| `fav-icon` | Browser / site icon | `site_icon` |
+| `states-hero` | States page banner | `glm_states_hero_id` |
+
+Any of `.webp`, `.jpg`, `.jpeg`, `.png` is accepted — the command finds files by basename, so switching format needs no code change.
+
+---
+
+## Why masters are version-controlled at all
+
+The Media Library lives in `wp-content/uploads/`, which is excluded from git (repo-scope decision #4 — we do not version binary uploads).
+
+If an image exists only in the Media Library, it exists in exactly one place: one local site on one laptop. Keeping masters in the theme means a fresh clone re-imports them in one command, and you can see when a logo changed and what it changed from. The Media Library holds a *working copy*, not the only copy.
 
 ---
 
 ## Format guidance
 
-**SVG is strongly preferred** for the logo. It is resolution-independent, so it stays sharp on retina displays and at any size, and it is usually smaller than a PNG.
+**SVG is preferred for logos** — resolution-independent and usually smaller.
 
-> **Gotcha:** WordPress **blocks SVG uploads by default**, and for good reason — an SVG is XML and can carry scripts. Do not install a plugin that simply allows SVGs for everyone. If we go the SVG route, I will sanitise on upload and restrict it to administrators.
+> **Gotcha:** WordPress blocks SVG uploads by default, and rightly so — an SVG is XML and can carry scripts. Do not install a plugin that allows SVGs for everyone. If we go that route it needs sanitising on upload and restricting to administrators.
 
-If SVG is not available, supply a PNG at **twice** the largest size it will display at. A logo shown at 180px wide needs a 360px-wide file.
+Otherwise supply a PNG at **twice** its largest display size. A logo shown at 180px needs a 360px-wide file.
 
-### About the current logo
+**Photographs** (such as the states banner) should be JPG or WebP, roughly 1920px wide, and compressed — an uncompressed hero is often the heaviest thing on a page.
 
-Both hotlinked staging copies are **~1.5 KB PNGs**, which is very small for a logo — almost certainly too low-resolution to look sharp on a modern display.
+### Known issue with the current logo
 
-Worth noting: the nav and footer pull from **two different staging servers** and the files are **different sizes** (1446 vs 1545 bytes). The "same" logo has already diverged into two versions. Consolidating to one master here fixes that permanently.
-
----
-
-## What the logo is used for
-
-| Where | Built in | Notes |
-|---|---|---|
-| Site header | Header Footer Elementor — Phase 5 | Links to `/` |
-| Site footer | Header Footer Elementor — Phase 5 | Often the mark-only version |
-| Site icon / favicon | Appearance → Customize | Square, 512×512 minimum |
-| Open Graph image | SEO plugin — later | 1200×630, logo on a branded background |
+`GL Logo.png` is **319×49**, which is only crisp to about 160px wide on a 2× display. Most law-firm header logos sit at 180–220px, so it will look slightly soft. An SVG or a ~700px-wide PNG fixes it permanently.
 
 ---
 
 ## Social icons are handled separately
 
-The five social icons the source hotlinked from staging are **no longer needed** — they come from Font Awesome via the `[glm_socials]` shortcode. Nothing to add here for those.
+The five icons the source hotlinked from staging are no longer needed — they come from Font Awesome and inline SVG via `[glm_socials]`. Nothing to add here for those.
