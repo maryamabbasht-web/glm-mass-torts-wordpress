@@ -104,6 +104,7 @@ require_once GLM_DIR . '/inc/forms.php';
 require_once GLM_DIR . '/inc/nav-menu.php';
 require_once GLM_DIR . '/inc/search.php';
 require_once GLM_DIR . '/inc/integrations.php';
+require_once GLM_DIR . '/inc/brand.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
 	require_once GLM_DIR . '/inc/audit.php';
