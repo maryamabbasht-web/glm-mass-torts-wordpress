@@ -1506,12 +1506,15 @@ html .glm-header__cta .elementor-button .elementor-button-icon {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+/* Column headings: sentence case at display scale, per the reference.
+   The old uppercase + 2px tracking read as a small label; at footer
+   scale these are section headings and should look like it. */
 .glm-footer h4 {
-  margin: 0 0 1.75rem;
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
+  margin: 0 0 2.25rem;
+  font-size: var(--glm-text-2xl);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--glm-white);
 }
 
@@ -1522,13 +1525,19 @@ html .glm-footer__divisions ul {
 }
 
 html .glm-footer__divisions li {
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+html .glm-footer__divisions li:last-child {
+  margin-bottom: 0;
 }
 
 html .glm-footer__divisions a {
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: 1px;
+  display: inline-block;
+  font-size: var(--glm-text-lg);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
   color: var(--glm-cta);
   text-decoration: none;
 }
@@ -1538,23 +1547,47 @@ html .glm-footer__divisions a:focus-visible {
   text-decoration: underline;
 }
 
+/* Bottom bar: legal links and socials share a row, copyright and
+   disclaimer sit beneath — matching the reference.
+
+   .glm-footer__legal is one widget holding three elements that need
+   to land in different cells, so `display: contents` promotes its
+   children to grid items. Safe here: it is a plain div, so no
+   semantics are lost, and the markup is untouched. */
+
 .glm-footer__bottom {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2rem;
+  align-items: center;
   max-width: var(--glm-container);
   margin: 0 auto;
-  padding: 1.75rem 0 0;
+  padding: 2rem 0 0;
+}
+
+.glm-footer__legal {
+  display: contents;
 }
 
 .glm-footer__links {
+  grid-column: 1 / 3;
+  grid-row: 1;
   display: flex;
   flex-wrap: wrap;
   gap: 2.1875rem;
   list-style: none;
-  margin: 0 0 0.5rem;
+  margin: 0;
   padding: 0;
 }
+
+.glm-footer__socials {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
+/* Placement and appearance are set together below, so there is one
+   rule per element rather than two that can drift apart. */
 
 .glm-footer__links a {
   font-size: 0.75rem;
@@ -1568,23 +1601,55 @@ html .glm-footer__divisions a:focus-visible {
 }
 
 .glm-footer__copy {
+  grid-column: 1;
+  grid-row: 2;
   margin: 0;
-  font-size: 0.75rem;
-  color: var(--glm-white);
+  font-size: var(--glm-text-xs);
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
 }
 
 .glm-footer__disclaimer {
-  max-width: 640px;
+  grid-column: 2 / -1;
+  grid-row: 2;
+  max-width: 78ch;
   margin: 0;
   font-size: var(--glm-text-xs);
-  line-height: 1.45;
-  color: var(--glm-accent-light);
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 @media (max-width: 900px) {
+
   .glm-footer__top {
     grid-template-columns: 1fr;
     gap: 3rem;
+  }
+
+  /* Offices drop to a single column; two would be unreadable. */
+  .glm-footer__offices .glm-locations {
+    columns: 1;
+  }
+
+  /* Bottom bar stacks: links, socials, copyright, disclaimer.
+     Explicit placement is cleared so the grid can flow naturally. */
+  .glm-footer__bottom {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  .glm-footer__links,
+  .glm-footer__socials,
+  .glm-footer__copy,
+  .glm-footer__disclaimer {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+
+  .glm-footer__copy {
+    white-space: normal;
   }
 }
 
@@ -1976,15 +2041,57 @@ html .glm-contact__lead p {
    are inverted here. (0,2,0) beats the (0,1,0) base. */
 
 .glm-footer__offices .glm-office__city {
+  font-size: var(--glm-text-base);
+  font-weight: 700;
   color: var(--glm-white);
 }
 
 .glm-footer__offices .glm-office__address {
-  color: rgba(255, 255, 255, 0.75);
+  font-size: var(--glm-text-sm);
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .glm-footer__offices .glm-office__phone {
-  color: var(--glm-accent-light);
+  font-size: var(--glm-text-sm);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* Two phone numbers sit side by side rather than stacked, as in the
+   reference. inline-block keeps them on one line and lets them wrap
+   together on narrow screens. */
+.glm-footer__offices .glm-office__phone {
+  display: inline-block;
+  margin-right: 1.25rem;
+}
+
+/* Multi-column, not a grid.
+   -----------------------------------------------------------
+   A 2-col grid would flow the four states as FL,MA / NJ,MI. CSS
+   columns BALANCE BY HEIGHT instead, which puts Florida's four
+   offices in column one and Massachusetts, New Jersey and Michigan
+   in column two — the arrangement in the reference, and it stays
+   correct if an office is added or removed. */
+.glm-footer__offices .glm-locations {
+  display: block;
+  columns: 2;
+  column-gap: 3rem;
+}
+
+.glm-footer__offices .glm-loc-state {
+  min-width: 0;
+  margin-bottom: 2rem;
+  break-inside: avoid;
+}
+
+.glm-footer__offices .glm-loc-state__name {
+  padding-bottom: 1rem;
+  font-size: var(--glm-text-base);
+  letter-spacing: var(--glm-tracking-wide);
+}
+
+.glm-footer__offices .glm-loc-state__offices {
+  gap: 1.5rem;
 }
 
 
