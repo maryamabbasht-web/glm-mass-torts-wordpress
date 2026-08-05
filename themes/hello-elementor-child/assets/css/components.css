@@ -97,6 +97,73 @@ html .elementor-widget-heading .elementor-heading-title {
 }
 
 
+/* =============================================================
+   HELLO ELEMENTOR RESET OVERRIDES
+   -------------------------------------------------------------
+   The parent theme's reset.css ships its own brand palette and
+   applies it to every bare link and button:
+
+     a                       { color: #c36 }              (0,0,1)
+     a:active, a:hover       { color: #336 }              (0,1,1)
+     button, [type=button],
+     [type=submit]           { color/border: #c36 }       (0,0,1)/(0,1,0)
+     …:hover, …:focus        { background: #c36 }         (0,1,1)/(0,2,0)
+
+   Pink links and pink buttons wherever a component class does not
+   already cover the element — post content, legal pages, search
+   results, and any bare <button>.
+
+   WHY MATCHING SPECIFICITY IS ENOUGH HERE, WITH NO `html` PREFIX:
+   these selectors are matched exactly, so the cascade falls to
+   document order — and that order is GUARANTEED, not incidental.
+   functions.php declares glm-tokens as dependent on the
+   'hello-elementor' handle, and glm-components on glm-tokens, so
+   WordPress must emit reset.css first. Adding specificity we do
+   not need would only make component rules harder to write.
+
+   Placed BEFORE the component sections on purpose: everything
+   below is free to override it on equal specificity.
+   ============================================================= */
+
+a {
+  color: var(--glm-accent);
+  text-decoration: none;
+}
+
+a:hover,
+a:active,
+a:focus-visible {
+  color: var(--glm-primary);
+  text-decoration: underline;
+}
+
+/* Buttons are neutralised rather than restyled — the GLM button
+   classes supply appearance. Left alone: padding, font-size and
+   white-space, which are layout defaults nothing conflicts with. */
+button,
+[type="button"],
+[type="reset"],
+[type="submit"] {
+  color: inherit;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+button:hover,
+button:focus,
+[type="button"]:hover,
+[type="button"]:focus,
+[type="reset"]:hover,
+[type="reset"]:focus,
+[type="submit"]:hover,
+[type="submit"]:focus {
+  color: inherit;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+
 /* ── Container direction ─────────────────────────────────
    A THIRD conflict mechanism, different from the two above.
 
@@ -166,8 +233,12 @@ html .glm-stats .glm-stats__inner {
   transition: background 0.2s, border-color 0.2s;
 }
 
+/* Background restated on hover: the Hello reset override above
+   neutralises button backgrounds at :hover, so a component that
+   wants one must say so for that state too. */
 .glm-tort-tab:hover,
 .glm-tort-tab:focus-visible {
+  background: var(--glm-accent-pale);
   border-bottom-color: var(--glm-accent);
 }
 
@@ -1319,6 +1390,7 @@ html .glm-header__cta .elementor-button .elementor-button-icon {
 
 .glm-search__submit:hover,
 .glm-search__submit:focus-visible {
+  background: var(--glm-accent);
   filter: brightness(1.1);
 }
 
