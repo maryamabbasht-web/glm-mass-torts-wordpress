@@ -70,8 +70,8 @@ Text Domain:  glm
   --glm-pill-tech-bg:     #f0e8ff;  --glm-pill-tech-fg:     #6b21a8;
 
   /* ── Typography ────────────────────────────────────────── */
-  --glm-font-display: 'Cormorant Garamond', Georgia, serif;
-  --glm-font-body:    'Outfit', system-ui, -apple-system, sans-serif;
+  --glm-font-display: 'Roboto Slab', Georgia, serif;
+  --glm-font-body:    'Mulish', system-ui, -apple-system, sans-serif;
 
   /* Type scale — collapsed from the 17 ad-hoc sizes in the source
      to a defined 9-step scale. See docs/design-tokens.md. */

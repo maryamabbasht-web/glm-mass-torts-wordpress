@@ -62,7 +62,8 @@ add_action( 'wp_enqueue_scripts', 'glm_enqueue_assets', 20 );
 function glm_enqueue_fonts() {
 	wp_enqueue_style(
 		'glm-fonts',
-		'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Outfit:wght@300;400;500;600&display=swap',
+		// Roboto Slab ships no italic cut, so only upright weights are requested.
+		'https://fonts.googleapis.com/css2?family=Mulish:ital,wght@0,300;0,400;0,500;0,600;1,400;1,600&family=Roboto+Slab:wght@400;600;700&display=swap',
 		array(),
 		null // phpcs:ignore — external stylesheet, no version query.
 	);
