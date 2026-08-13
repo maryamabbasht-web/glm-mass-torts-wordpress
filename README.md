@@ -294,7 +294,7 @@ studio wp glm import-torts          # 40 torts from data/torts.json
 studio wp glm import-content        # 8 offices, 4 results
 studio wp glm build-sections        # 5 Elementor section templates
 studio wp glm build-form            # CF7 case evaluation form
-studio wp glm build-pages           # 9 pages + Primary menu
+studio wp glm build-pages           # 9 pages + Primary menu (no Home item)
 studio wp glm build-header-footer   # header + footer templates
 studio wp glm audit                 # check against the ruleset
 ```

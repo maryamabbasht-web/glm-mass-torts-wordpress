@@ -1547,8 +1547,21 @@ html .glm-footer__divisions a:focus-visible {
   text-decoration: underline;
 }
 
-/* Bottom bar: legal links and socials share a row, copyright and
+/* Division description. Same muted white as the office addresses opposite
+   it, so the two footer columns read at the same level. */
+html .glm-footer__divisions li p {
+  margin: 0.5rem 0 0;
+  font-size: var(--glm-text-sm);
+  line-height: var(--glm-leading-body);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* Bottom bar: logo, legal links and socials share a row, copyright and
    disclaimer sit beneath — matching the reference.
+
+   The three columns (auto 1fr auto) are the logo, the links and the
+   socials, so the links centre themselves in the leftover space no
+   matter how wide the logo or the icon row turn out to be.
 
    .glm-footer__legal is one widget holding three elements that need
    to land in different cells, so `display: contents` promotes its
@@ -1569,11 +1582,24 @@ html .glm-footer__divisions a:focus-visible {
   display: contents;
 }
 
+.glm-footer__logo {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.glm-footer__logo img {
+  display: block;
+  width: auto;
+  max-width: 170px;
+  height: auto;
+}
+
 .glm-footer__links {
-  grid-column: 1 / 3;
+  grid-column: 2;
   grid-row: 1;
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 2.1875rem;
   list-style: none;
   margin: 0;
@@ -1631,7 +1657,7 @@ html .glm-footer__divisions a:focus-visible {
     columns: 1;
   }
 
-  /* Bottom bar stacks: links, socials, copyright, disclaimer.
+  /* Bottom bar stacks: logo, links, socials, copyright, disclaimer.
      Explicit placement is cleared so the grid can flow naturally. */
   .glm-footer__bottom {
     grid-template-columns: 1fr;
@@ -1639,6 +1665,7 @@ html .glm-footer__divisions a:focus-visible {
     align-items: start;
   }
 
+  .glm-footer__logo,
   .glm-footer__links,
   .glm-footer__socials,
   .glm-footer__copy,
@@ -1646,6 +1673,11 @@ html .glm-footer__divisions a:focus-visible {
     grid-column: 1;
     grid-row: auto;
     justify-self: start;
+  }
+
+  /* Centring is only meaningful in the three-column desktop row. */
+  .glm-footer__links {
+    justify-content: flex-start;
   }
 
   .glm-footer__copy {

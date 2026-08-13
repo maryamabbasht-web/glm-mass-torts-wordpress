@@ -112,14 +112,41 @@ function glm_template_header() {
  */
 function glm_template_footer() {
 
+	/*
+	 * Divisions are data, not inline markup: the <li> is built once in the
+	 * loop below. Adding a division — or rewording a description — means
+	 * touching one array entry instead of a string of tags, and the label
+	 * and its description cannot drift into different list items.
+	 */
+	$division_items = array(
+		array(
+			'url'   => 'https://www.revenuecycleattorneys.com/',
+			'label' => 'Healthcare Revenue Cycle Recovery',
+			'desc'  => 'Focused on healthcare reimbursement, insurance recovery, arbitration, and complex revenue disputes for physicians, hospitals, and healthcare providers.',
+		),
+		array(
+			'url'   => 'https://www.gedlawyers.com/',
+			'label' => 'Personal Injury & Catastrophic Loss',
+			'desc'  => 'Advocating for individuals and families affected by serious injury, wrongful death, and life-altering events.',
+		),
+		array(
+			'url'   => home_url( '/mass-torts/' ),
+			'label' => 'Mass Torts & Class Actions',
+			'desc'  => 'Addressing large-scale harm involving defective products, pharmaceutical injuries, and systemic corporate misconduct.',
+		),
+	);
+
+	$division_html = '';
+	foreach ( $division_items as $item ) {
+		$division_html .= '<li>'
+			. '<a href="' . esc_url( $item['url'] ) . '">' . esc_html( $item['label'] ) . '</a>'
+			. '<p>' . esc_html( $item['desc'] ) . '</p>'
+			. '</li>';
+	}
+
 	$divisions = glm_text(
 		'ftr.divisions',
-		'<h4>Ged Lawyers Divisions</h4>'
-		. '<ul>'
-		. '<li><a href="https://www.revenuecycleattorneys.com/">Healthcare Revenue Cycle Recovery</a></li>'
-		. '<li><a href="https://www.gedlawyers.com/">Personal Injury &amp; Catastrophic Loss</a></li>'
-		. '<li><a href="' . esc_url( home_url( '/mass-torts/' ) ) . '">Mass Torts &amp; Class Actions</a></li>'
-		. '</ul>',
+		'<h4>Ged Lawyers Divisions</h4><ul>' . $division_html . '</ul>',
 		'glm-footer__divisions',
 		'Divisions'
 	);
@@ -132,6 +159,28 @@ function glm_template_footer() {
 	);
 
 	$socials = glm_text( 'ftr.socials', '[glm_socials]', 'glm-footer__socials', 'Social links' );
+
+	/*
+	 * Same attachment as the header, so the two can never disagree.
+	 * Guarded: with no glm_logo_id (or a deleted attachment) Elementor's
+	 * image widget still renders its wrapper, leaving an empty grid cell
+	 * that shifts the legal links off-centre. Omit the widget instead.
+	 */
+	$logo_id = (int) get_option( 'glm_logo_id' );
+	$logo    = ( $logo_id && get_post( $logo_id ) )
+		? glm_widget(
+			'ftr.logo',
+			'image',
+			array(
+				'image'      => array( 'id' => $logo_id, 'url' => wp_get_attachment_url( $logo_id ) ),
+				'image_size' => 'full',
+				'link_to'    => 'custom',
+				'link'       => array( 'url' => home_url( '/' ), 'is_external' => '', 'nofollow' => '' ),
+			),
+			'glm-footer__logo',
+			'Logo'
+		)
+		: null;
 
 	$legal = glm_text(
 		'ftr.legal',
@@ -156,7 +205,12 @@ function glm_template_footer() {
 			'glm-footer',
 			array(
 				glm_container( 'ftr.top', 'glm-footer__top', array( $divisions, $offices ), 'Top' ),
-				glm_container( 'ftr.bottom', 'glm-footer__bottom', array( $socials, $legal ), 'Bottom' ),
+				glm_container(
+					'ftr.bottom',
+					'glm-footer__bottom',
+					array_values( array_filter( array( $logo, $socials, $legal ) ) ),
+					'Bottom'
+				),
 			),
 			'Footer'
 		),
