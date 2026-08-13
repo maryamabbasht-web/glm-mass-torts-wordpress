@@ -1,0 +1,794 @@
+# project_history.md
+
+A working log of what changed in this project and why.
+
+**Convention:** newest entry first. Every entry records the date, what changed, and the reasoning. Decisions and principles are *not* duplicated here — they live in [learning.md](learning.md). This file is the narrative; that file is the reference.
+
+---
+
+## 2026-08-06 — `wp glm install`: one command from bare WordPress to a working site
+
+**Type:** `feat` · **Branch:** `feat/install-command`
+
+### What changed
+
+- Added `inc/install.php` — the `wp glm install` orchestrator
+- Added `data/plugins.json` — pinned versions for the four required plugins
+- Added a `PLUGINS` audit check for version drift
+- Rewrote the README's onboarding into four steps, plus a command reference
+
+### It orchestrates; it does not reimplement
+
+Every step delegates to a command that already existed. Onboarding previously meant knowing nine commands *and* the order they had to run in — an order with real dependencies that are invisible from the command names:
+
+- `build-pages` reads `tort_category` with `hide_empty => true`, so with no torts the menu silently gets no category items
+- `apply-kit` and `build-header-footer` both read `glm_logo_id`, so brand assets must land first
+
+Getting it wrong produces a site that looks built but is quietly missing pieces.
+
+### Safe by default, proven not asserted
+
+A plain `wp glm install` skips content importers when content exists and calls builders without `--force`. Verified by running it against the fully built site and comparing before/after: identical counts **and identical section fingerprints**. `--rebuild` is the only destructive path, and it refuses on a site declaring `WP_ENVIRONMENT_TYPE=production` without `--yes`.
+
+### Plugins pinned without Composer
+
+Elementor 4.2.0, ACF 6.8.6, HFE 2.9.2, CF7 6.1.6 — installed at those exact versions by WP-CLI, which the project already depends on. This project breaks *silently* on version drift: Elementor 4.x removed `[elementor-template]` and the classic style controls. The manifest is the record of what the site was built against; the audit reports drift.
+
+### Two real bugs found while building it
+
+**1. `launch => true` is unusable here.** Spawning a subprocess is the textbook way to pick up newly activated plugins. Every step failed with `Could not open input file: C:\Program` — WP-CLI builds the child command line without quoting the path to its own binary, and Studio's lives under `C:\Program Files\`. Switched to in-process, which brings a known limitation: a plugin activated during the run is not *loaded* in that process. Rather than half-build and emit confusing failures, the command stops after activating plugins and asks to be run once more. Only ever happens on a fresh site.
+
+**2. `--skip-plugins` is a WP-CLI global.** The originally specified flag name is reserved — WP-CLI intercepts it to skip *loading* plugins, so it never reaches the command, and it would leave Elementor and ACF unavailable, failing every build step in a way that looks like our bug. Renamed to `--skip-plugin-install`, and the command now detects the global and refuses with an explanation.
+
+### Deliberately out of scope
+
+No Docker, DDEV, Composer, CI or deployment. Studio remains the supported local environment.
+
+---
+
+## 2026-07-29 — Header visual refinement to match the design reference
+
+**Type:** `style` · **Branch:** `style/header-refinement`
+
+Header only. Architecture untouched — still `glm_nav()`, no HFE widget, no new plugins.
+
+### Visual changes
+
+| # | Change | From | To |
+|---|---|---|---|
+| 1 | Header height | ~47px | **102px**, set directly |
+| 2 | Nav link colour | `--glm-accent-light` | `--glm-white` |
+| 3 | Active + hover | white | `--glm-cta` green |
+| 4 | Dropdown caret | filled triangle | thin chevron |
+| 5 | CTA shape | 2px radius | `--glm-radius-pill` |
+| 6 | Search | **absent** | added |
+| 7 | Nav type | 14px / 500 | 15px / 400 |
+| 8 | Logo height | 44px | 46px |
+| 9 | Stale HFE nav CSS | 2 rules | removed |
+
+### Height set directly, not derived
+
+`--glm-header-height: 102px` with `min-height` and flex centring, rather than padding arithmetic. Padding-derived height drifts whenever the logo or button size changes; an explicit height does not. `box-sizing: border-box` means the 3px accent border is inside the number.
+
+### Search uses `<details>`, not JavaScript
+
+`<summary>` already has button semantics, is keyboard focusable, responds to Enter and Space, and manages its own expanded state. So the disclosure needs **no JS and no ARIA of our own** — the platform supplies both. It posts to WordPress core search; no plugin.
+
+Verified: `/?s=hernia` returns *Hernia Mesh Litigation*.
+
+### Tokens
+
+Three component-scoped custom properties on `.glm-header` — `--glm-header-height`, `--glm-header-logo-h`, `--glm-header-gap` — following the `--glm-nav-breakpoint` precedent. No hardcoded colours, type or breakpoints introduced.
+
+### Deliberately not changed
+
+- **Menu labels.** The reference shows *Practice Area / States / Resources*; ours are *Home / Mass Torts / Locations*. That is content from Appearance → Menus, partly generated from the taxonomy — not a styling matter.
+- **The 3px accent border.** The reference screenshot has a devtools inspector overlay across the header edge, so its presence is unverifiable. Kept; one line to remove.
+
+### A third false negative from my own checks
+
+The CTA icon check reported FAIL. The icon was present — Elementor 4.x renders font icons as inline SVG (`e-fas-phone`), not `<i>`. Same failure mode as the earlier basename and `contains()` mistakes: the check was wrong, not the code.
+
+---
+
+## 2026-07-29 — Header switched to glm_nav(); HFE widget assets dequeued
+
+**Type:** `feat` · **Branch:** `feat/nav-switch`
+
+Manual regression checklist passed, so the switch went ahead.
+
+### What changed
+
+- Header template now uses a `shortcode` widget containing `[glm_nav]`
+- HFE's `navigation-menu` widget removed from the header
+- HFE's unconditionally-enqueued widget stylesheets dequeued
+- Audit extended to fail if an HFE widget is added back while they are dequeued
+- Test pages removed
+
+### Asset impact — measured, not estimated
+
+Eight files, **222.9 KB**, no longer requested:
+
+| File | Bytes |
+|---|--:|
+| `header-footer-elementor/inc/widgets-css/frontend.css` | 83,015 |
+| `elementor/.../font-awesome/css/fontawesome.css` | 72,184 |
+| `header-footer-elementor/inc/js/frontend.js` | 33,934 |
+| `elementor/.../eicons/css/elementor-icons.min.css` | 22,258 |
+| `elementor/assets/css/widget-icon-list.min.css` | 10,255 |
+| `elementor/assets/css/widget-social-icons.min.css` | 5,110 |
+| `elementor/.../font-awesome/css/brands.css` | 732 |
+| `elementor/.../font-awesome/css/solid.css` | 727 |
+
+**Requests 53 → 45.** Net saving after `nav.js` (6.1 KB): **~217 KB per page**.
+
+The Font Awesome entries are not a loss — HFE was loading the **non-minified** copies alongside our own `.min.css` versions. Verified after dequeuing: all five social icons still render.
+
+### Two measurement errors caught during this work
+
+Both mine, both would have produced a wrong report:
+
+1. **Basename-keyed asset diff** reported only 33 KB saved. Several HFE handles point at files inside Elementor's directory, so basenames collided and hid seven removals. Re-measured by URL: 222.9 KB.
+2. **`contains(@class,"glm-nav__toggle")`** matched `glm-nav__toggle-sub` too, so the hamburger check "failed" while both buttons were correct.
+
+Same lesson as the earlier scraper and taxonomy-template bugs: the check needs verifying as much as the thing it checks.
+
+### One hook detail worth recording
+
+Dequeuing on `wp_enqueue_scripts` had **no effect**. HFE enqueues on `elementor/frontend/after_register_scripts`, which fires later. Moved to `wp_print_styles` priority 100 — the last point before output.
+
+### Verification
+
+Audit passes 10 of 11 (the three legal stubs remain, by design). Five templates return 200 with the new nav rendering and no PHP errors. `hfe-nav-menu` markup is gone from every page. Appearance → Menus unaffected: 11 items, 5 top level, 6 nested.
+
+### HFE remains installed
+
+It still provides the header/footer template system (**R6**). Only its widgets are unused, and only its widget CSS is dequeued — `hfe-style` (776 bytes) is deliberately kept.
+
+---
+
+## 2026-07-29 — Text-editor fix + parallel glm_nav() implementation
+
+**Type:** `fix` / `feat` · **Branch:** `feat/glm-nav`
+
+### Part 1 — text-editor neutralisation corrected
+
+The reset targeted `.elementor-widget-text-editor`, which is the widget **root** — the same element GLM classes sit on. At (0,2,1) it out-specified our own (0,1,0) component rules and **suppressed GLM styling on all 21 text-editor widgets**.
+
+- Removed text-editor from the neutralisation layer
+- Prefixed its 14 component rules with `html` so they reach (0,1,1) and beat Elementor's (0,1,0)
+- Added an audit check that fails if the reset ever targets a widget root again
+
+The invariant is now stated precisely at the top of `components.css`, per-widget, derived from the full audit rather than from the first case encountered.
+
+### Part 2 — glm_nav() built alongside HFE
+
+Nothing swapped. HFE still renders the header.
+
+- `inc/nav-menu.php` — walker, renderer, `[glm_nav]`
+- `assets/js/nav.js` — 6.1 KB, no jQuery
+- `.glm-nav` CSS block with the breakpoint as a custom property the JS reads
+
+**Deliberately better than what it replaces:** real `<button>` elements instead of `div[role=button]`; the parent link stays a link with a *separate* sibling toggle button, avoiding HFE's nested-interactive-element pattern; a focus trap HFE never had; and `aria-current="page"`, which HFE does not emit.
+
+**It also fixes a live bug.** HFE hardcodes 767/1024 in its JavaScript while this project breaks at 900, so between 901px and 1024px the script and the stylesheet disagreed about whether to show the hamburger. `nav.js` reads `--glm-nav-breakpoint` from CSS instead.
+
+### Verification
+
+Automated checks all pass: ARIA attributes, button semantics, screen-reader labels, zero nested interactive elements, 11 = 11 menu item parity, **34 DOM nodes vs HFE's 36**, breakpoint consistency, no-JS fallback, and 8 templates returning 200 with no PHP errors.
+
+> **Two measurement artifacts caught during verification**, both my own fault rather than real defects: `aria-current` appeared to fail because the test page was not itself a menu item, and `glm_nav` appeared heavier because HFE's hamburger sits *outside* its `<nav>` and my selector missed it. Re-measured fairly, both pass.
+
+### Asset impact
+
+`hfe-frontend-js` (33.9 KB) is enqueued **only** as a dependency of the nav widget, so dropping the widget removes it, along with 37 nav selectors. Net saving roughly **28 KB of JavaScript**.
+
+But `hfe-widgets-style` (83 KB) is enqueued **unconditionally**, and HFE provides the header/footer template system itself — so **the plugin cannot be uninstalled**, only its nav widget stopped being used.
+
+### Not yet done
+
+Keyboard interaction, focus-trap behaviour, console errors and pixel comparison need a human at a browser. Static analysis cannot press Escape.
+
+---
+
+## 2026-07-29 — Resolve the two-design-systems conflict
+
+**Type:** `refactor` · **Branch:** `refactor/single-styling-system`
+
+### The problem, as stated
+
+Two competing styling systems: the GLM design system (tokens, component classes, in git) and Elementor's built-in one (Global Colors, Global Typography, per-widget CSS). Elementor's frequently won, causing overridden typography, wrong colours, and escalating specificity workarounds — two sources of truth for one design.
+
+### What was tried and failed
+
+Before choosing an architecture, three attempts to remove Elementor's system outright:
+
+| Attempt | Result |
+|---|---|
+| Clear `system_typography` | No effect — values persist |
+| Clear every global | Elementor **restores** the four slots |
+| Define `font-family` only | `font-size` still defined (8 vars) |
+
+**Elementor's design system cannot be removed, emptied, or narrowed.** It is structural to the plugin. Recording this so nobody spends the afternoon rediscovering it.
+
+### Why the obvious alternative was rejected
+
+"Let Elementor own typography and colour, GLM own layout" fails on two counts:
+
+1. Elementor has **4 typography slots**; the design has **17 distinct type sizes**.
+2. Elementor's kit cannot reach the tort grid, results list, locations, forms, archive or single templates — **all theme PHP**. It structurally cannot cover the site.
+
+### The architecture chosen
+
+**Neutralise once, then style normally.** One reset layer at the top of `components.css` resets Elementor's widget defaults to `inherit`:
+
+```css
+html .elementor-widget-heading .elementor-heading-title,
+html .elementor-widget-text-editor,
+html .elementor-widget-button .elementor-button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+```
+
+Elementor's system still exists but has **no effect**. GLM tokens are the only thing deciding appearance.
+
+Component CSS then styles the **GLM wrapper class** and lets Elementor's inner element inherit. The previous per-rule `html` prefixes were removed from every heading rule.
+
+### Why some prefixes remain
+
+`background`, `border`, `padding` and `display` **do not inherit**, so they must be set on Elementor's own element and still need `html` to reach (0,2,1). That is now 11 button rules rather than the whole stylesheet — and 4 of the 15 remaining prefixed selectors are the reset block itself.
+
+### Why not !important
+
+It escalates. The only thing that overrides an `!important` is another one — including your own later rules and anything set in Elementor's panel. Specificity composes. The single remaining `!important` is on the form honeypot, with a comment: a visible honeypot is a broken form.
+
+### Enforcement
+
+`wp glm audit` now fails if:
+- the neutralisation layer is missing or edited away
+- any selector reaches into Elementor markup without the `html` prefix
+- a redundant `.glm-* .elementor-heading-title` selector reappears
+- `!important` count exceeds four
+
+### Verification
+
+CSS valid (207/207 braces, comments closed). All eight sections still render. Audit passes 10 of 11, the three outstanding items being the legal stubs.
+
+> **Still worth a human eye.** `font: inherit` is deliberately broad, and no automated check can confirm the site *looks* right. The design pass should catch anything the reset took that was actually wanted.
+
+---
+
+## 2026-07-27 — Phase 6: audit command, editor guide, case evaluation form
+
+**Type:** `feat` · **Branches:** `feat/audit-and-guide`, `feat/case-form`
+
+### What changed
+
+- Added `inc/audit.php` — `wp glm audit`, checking the site against the ruleset
+- Added `docs/editor-guide.md` — plain-language guide for non-technical staff
+- Added an `<h1>` to every page, and styled it
+- Installed **Contact Form 7**; added `inc/forms.php` and `wp glm build-form`
+- Wired the form into `single-tort.php` through the filter exposed in Phase 3
+
+### The audit earned its keep immediately
+
+First run: **five pages with no `<h1>` at all**.
+
+The cause is structural and I would not have spotted it by eye. Section templates are shared, so their top heading is an `<h2>` — only the hero carries an `<h1>`, and the hero appears only on the home page. Reusing sections on About, Contact and the legal pages therefore produced pages with zero `<h1>`. Each non-home page now declares its own.
+
+> A ruleset enforced by memory decays the week after handoff. Fourteen written rules are now one command, and the command found a real defect on its first run.
+
+The three legal stubs remain flagged deliberately — they *should* fail until someone writes them.
+
+### Contact Form 7, chosen for the data posture
+
+CF7 **does not persist submissions**. It emails them and forgets. For a firm collecting injury descriptions that is the safer default: a site compromise exposes no case history, because none is stored.
+
+Nicer builders (Fluent Forms) store every entry by default, which would put names, phone numbers and injury details at rest in WordPress indefinitely — a real liability, and one that would demand a retention and purge policy nobody would maintain.
+
+### Built for the CRM handover
+
+The stated plan is to forward leads into GoHighLevel or Litify. Rather than leave that as a future rebuild, every successful submission fires:
+
+```php
+do_action( 'glm_case_submission', $lead, $contact_form );
+```
+
+with normalised data. Connecting a CRM is one function on that hook — no form or template changes.
+
+### The dropdown cannot drift
+
+The case-type `<select>` is populated from the tort CPT at render time via `wpcf7_form_tag`. It renders **42 options**: placeholder + 40 torts + "Other".
+
+The source's dropdown listed **29** case types against 40 torts, because it was maintained by hand. That class of drift is now impossible.
+
+### Spam
+
+A honeypot field, positioned off-screen rather than `display:none` because some bots skip hidden inputs. Explicitly *not* reCAPTCHA v3, which silently drops real users — on a site where a lost enquiry is a lost case, that trade is wrong. hCaptcha before launch if volume demands it.
+
+### Audit result
+
+Ten of eleven checks pass. The three outstanding items are the legal stubs, which are flagged by design.
+
+---
+
+## 2026-07-27 — Phase 5: header, footer, navigation and all pages
+
+**Type:** `feat` · **Branch:** `feat/header-footer-pages`
+
+### What changed
+
+- Installed **Header Footer Elementor**
+- Declared `add_theme_support( 'header-footer-elementor' )` — HFE only auto-detects a short list of themes and a child theme is not on it, so without this it renders its settings screen but never outputs anything
+- Added `inc/pages.php` — page and menu builder, `wp glm build-pages`
+- Added `inc/elementor-header-footer.php` — `wp glm build-header-footer`
+- Created 7 pages: Home, About, Contact, Locations, Privacy Policy, Terms, FAQ
+- Built the Primary menu and both site templates
+- Added header and footer CSS
+
+### The duplicate menu problem is gone
+
+The source shipped a desktop nav **and** a separately maintained mobile menu, each carrying its own copy of the tort links. They had already drifted apart from each other.
+
+There is now **one menu**, rendered responsively (**R6**, **R8**). Its six category items are generated from the `tort_category` taxonomy, so adding a category adds a menu item — nobody maintains a list.
+
+### The logo hotlink is finally dead
+
+The homepage now reports **zero `wpengine` references**. Every asset is served locally. That risk — a staging server elsewhere being pruned and taking the production logo with it — is closed.
+
+### Legal pages ship as visible stubs
+
+The source linked Privacy Policy, Terms, About and FAQ all to `href="#"`. For a firm collecting injury details through web forms, a missing privacy policy is a compliance exposure, not a cosmetic gap.
+
+They now exist as pages carrying explicit "this needs real content" copy and a `_glm_needs_content` flag, and `build-pages` warns about them on every run. A visible stub is harder to forget than a dead link.
+
+### Verification
+
+| Check | Result |
+|---|---|
+| Header | logo, nav, CTA all rendering |
+| Menu items | 11, including 6 generated category links |
+| Footer | divisions, offices, socials, legal |
+| Offices from CPT | 8 across 4 state groups |
+| Social links | 5 |
+| Logo source | local uploads |
+| `wpengine` hotlinks | **0** |
+| URL sweep | 10 / 10 return 200 |
+
+---
+
+## 2026-07-27 — Phase 4 complete: all five sections built, homepage assembled
+
+**Type:** `feat` · **Branch:** `feat/remaining-sections`
+
+### What changed
+
+- Added `inc/content-blocks.php` — importers and renderers for the `result` and `location` post types
+- Added `data/results.json` (4 records) and `data/locations.json` (8 records)
+- Added `[glm_results]` and `[glm_locations]` shortcodes
+- Added WP-CLI `glm import-content`
+- Generated four more sections: **Stats Bar, About, Divisions, Contact**
+- Added ~450 lines of component CSS, all token-based
+- Assembled the homepage and set it as the front page
+
+### The homepage is six lines
+
+```
+[glm_section slug="hero"]
+[glm_section slug="stats"]
+[glm_section slug="about"]
+[glm_section slug="divisions"]
+[glm_tort_grid tabs="no" featured="yes" heading="no"]
+[glm_section slug="contact"]
+```
+
+That is R10 working as intended — the page reads as a table of contents. Nothing is pasted; every section resolves through R4's shortcode, so editing a template updates every page using it.
+
+### R5 demonstrated twice on one page
+
+The stats bar renders **40+** and the About highlight renders **40+ Active Mass Torts** — both from `[glm_tort_count]`, both computed from the same query.
+
+The source hardcoded "35+" in both places, and was wrong in both. Those two numbers can no longer disagree with each other or with reality.
+
+### Verification — DOM-parsed, not grepped
+
+| Check | Result |
+|---|---|
+| Sections rendering | 6 / 6 |
+| Unresolved shortcodes | **0** |
+| Stats bar | 40+ · 198K+ · All 50 · $0 · 24/7 |
+| About highlights | 4, including the dynamic count |
+| Results from CPT | 4 / 4 correct |
+| Divisions | 3 / 3 |
+| Legacy Section/Column (**R2**) | **0** |
+| Flex containers | 63 |
+| Staging hotlinks | **0** |
+| Heading hierarchy (**R11**) | exactly one `<h1>`, then `<h2>`/`<h3>` in order |
+
+> A note on the verification itself: the first pass used regex against the HTML and returned nonsense — greedy matches spanning 63 containers reported the About copy as a stat number. Switching to `DOMDocument`/`DOMXPath` gave real answers. Regex over nested HTML produces confident garbage, which is the same failure mode as the earlier false negatives, just wearing different clothes.
+
+### R12 status
+
+All five sections and the kit are **generated from version-controlled PHP**. Nothing here needs exporting — `wp glm build-sections` and `wp glm apply-kit` rebuild the lot from git. The `exports/` ritual applies only to work done by hand in the Elementor UI.
+
+---
+
+## 2026-07-27 — Phase 4b: hero section generated; R4's mechanism corrected
+
+**Type:** `feat` / `fix` · **Branch:** `feat/hero-section`
+
+### What changed
+
+- Added `inc/elementor-sections.php` — generates Elementor Saved Templates from PHP
+- Generated the **Hero** section: container tree, real copy from the source, Navigator layers named (**R7**)
+- Added `[glm_section slug="..."]` — a replacement for R4's insertion mechanism
+- Added hero and shared button styles to `components.css`
+- Corrected R4 in `learning.md` and `docs/component-inventory.md`
+
+### ⚠️ R4's stated mechanism does not exist
+
+R4 said: insert Saved Templates with `[elementor-template id="123"]`. That is how Elementor 3.x worked.
+
+**It is not registered in Elementor Free 4.2.0.** Verified on the live site — the literal text rendered into the page. WordPress had even curled the quotes into `id=&#8221;50&#8243;` first, because `wptexturize` only skips *registered* shortcodes.
+
+Elementor 4.x registers `elementor-element` instead. We use neither. `[glm_section slug="hero"]` is built on `get_builder_content_for_display()`, and is better than what it replaced:
+
+- **Slug-addressed, not ID.** Rebuild a template and every page still resolves; a hardcoded ID breaks everywhere.
+- **Registered**, so `wptexturize` leaves the quotes alone.
+- **In git.**
+- **Fails visibly** to logged-in editors rather than rendering nothing.
+
+> The rule was right; the *mechanism* was assumed. It was flagged as "verify on install" back in Phase 1, and the verification failed. Rules should name the outcome — mechanisms need checking against the installed version.
+
+### Structure in Elementor, styling in CSS
+
+Elementor 4.x does not expose the classic style controls (`title_color`, `typography_*`, `padding`) on these widgets, and its styling schema shifts between versions. More to the point, anything set in Elementor's style panel lives in `postmeta` where git cannot see it (**R12**).
+
+So generated sections carry **only a CSS class per element**. Structure and copy live in Elementor where editors reach them; appearance lives in `components.css` using the design tokens.
+
+The trade-off is that an editor cannot restyle these from the panel. Given the founding brief, that is a feature.
+
+### Two silent-failure gotchas
+
+1. **Widgets take `_css_classes`; containers take `css_classes`** — no leading underscore. Wrong key and the element still renders, just without the class. Nothing errors; styling simply never applies.
+2. **Elementor caches rendered output.** After rebuilding a template, pages keep serving the old markup — which reads exactly like "my fix did not work" and sends you chasing the wrong bug. Cost a round trip. `glm build-sections` now clears the file cache automatically.
+
+### R12 status is better than planned
+
+Both the kit *and* the hero are **generated from version-controlled PHP**, so neither needs exporting — the file regenerates them. The `exports/` ritual now applies only to sections built by hand in the Elementor UI.
+
+### Verification
+
+Hero renders on a real page: all container and widget classes present, all copy correct, Elementor assets and compiled template CSS loading. Test pages deleted. Site now holds 40 torts, 2 Elementor templates, 1 page.
+
+---
+
+## 2026-07-27 — Phase 4a: brand assets imported, Elementor kit generated from theme tokens
+
+**Type:** `feat` · **Branch:** `feat/elementor-kit`
+
+### What changed
+
+- Imported `GL Logo.png` (319×49) and `fav-icon.png` (512×512) into the Media Library
+- Set the WordPress site icon and regenerated its proper sizes
+- Added `inc/elementor-kit.php` — Elementor's Global Colors, Fonts and breakpoints **generated from theme-defined tokens**
+- Added WP-CLI command `glm apply-kit`
+
+### The structural decision
+
+Elementor's kit lives in `postmeta`, so git captures none of it (**R12**). The usual answer is "click it into the UI, then remember to export."
+
+Instead the theme is now the **source of truth** and the kit is a **generated artifact**. Tokens are defined once in a version-controlled PHP file and pushed into Elementor by command.
+
+> This solves R12 for the kit **outright** rather than mitigating it. There is nothing to export, because the file regenerates it. A JSON export would be a snapshot of a derived thing; the file is the thing itself.
+>
+> Saved Templates in Phase 4b are not covered by this and will still need exporting.
+
+Applied: 4 system colours, 5 custom colours, 4 system typography presets, 3 custom presets, breakpoints, site logo.
+
+### The breakpoint bug — R8 caught in the act
+
+Saving `viewport_tablet = 900` stored correctly. The generated CSS still emitted `@media(max-width:1024px)`.
+
+The setting was right and the output was wrong, because Elementor's compiled CSS keeps the old breakpoint until its file cache is cleared, and the breakpoints manager caches its config for the request. Fixed by refreshing the manager, then clearing the file cache, then regenerating. Verified: CSS now emits 900 and 767.
+
+> Third time this pattern has appeared. The status scraper, the taxonomy template, and now this — each reported success while being wrong. Reading back the *artifact* rather than the *return value* is what caught all three.
+
+This matters because the source breaks at 900px and Elementor defaults to 1024. Left alone, the whole 900–1024 band renders with tablet styles the design never intended.
+
+### A deliberate duplicate
+
+`Surface Deep` carries the same hex as `Text` (`#0B1929`). One value, two roles — body copy and dark section backgrounds. De-duplicating would leave an editor picking a background from a swatch labelled "Text". A clear role name beats a clever de-duplication (**R14**).
+
+### Logo resolution — flagged, not blocking
+
+`GL Logo.png` is 319×49. On a 2× retina display that is only crisp up to ~159px wide, and most law-firm header logos sit at 180–220px. It will look soft. An SVG or a ~700px-wide PNG would fix it permanently. Proceeding meanwhile.
+
+### Verification
+
+Kit settings read back correctly. Generated CSS emits all 9 colour custom properties and both breakpoints at the intended widths. Favicon markup now declares accurate sizes: 32×32 for `icon`, 180×180 for `apple-touch-icon`, 192×192 for Android.
+
+---
+
+## 2026-07-26 — Social icons de-hotlinked; brand asset home created
+
+**Type:** `feat` · **Branch:** `feat/socials-and-brand`
+
+### What changed
+
+- Added `inc/socials.php` — `[glm_socials]`, rendering social links from Font Awesome
+- Added social styles to `components.css`
+- Added `brand/` at the repo root with a README, as the home for logo masters
+
+### Why
+
+The source hotlinked **five social SVGs from another project's staging server**. That is a live outage waiting to happen: when that staging site is pruned or rebuilt, the icons vanish from production. Elementor already bundles Font Awesome, so the replacements cost nothing.
+
+### The X problem
+
+Elementor bundles **Font Awesome 5 Free**. `fa-x-twitter` only exists in Font Awesome 6. The profile links to `x.com`, so falling back to the old bird would be visibly outdated branding.
+
+Resolved with a ~300-byte inline SVG for X and Font Awesome for the other four. No extra library, exact mark.
+
+### Two enqueue gotchas, both real
+
+1. Elementor only enqueues Font Awesome when one of **its own** icon widgets renders. A shortcode using `fab` classes on a page without one would show empty squares.
+2. Enqueueing from inside a shortcode runs during `the_content`, **after `wp_head` has printed**. The stylesheet then lands in the footer and icons pop in after paint.
+
+Both fixed by also hooking `wp_enqueue_scripts`. Verified on a real front-end render that the stylesheet appears in `<head>`, not the footer — a distinction the WP-CLI test could not have shown, because `wp_enqueue_scripts` never fires there.
+
+> Worth keeping: the first test said "Font Awesome not registered" and looked like a failure. It was a **false negative** — WP-CLI has no front-end enqueue cycle. Testing in the wrong context produces confident, wrong answers in both directions.
+
+### Logo
+
+`brand/` now exists as the documented home for logo masters, because `wp-content/uploads/` is excluded from git. Masters live in the repo; the Media Library holds a working copy imported with `studio wp media import`.
+
+Also found: the nav and footer logos are pulled from **two different staging servers** and are **different files** (1446 vs 1545 bytes). The same logo has already forked. Both are ~1.5 KB PNGs, almost certainly too low-resolution for modern displays.
+
+### Verification
+
+Rendered on a real page: 5 links, 4 Font Awesome icons, 1 inline SVG, 5 screen-reader labels, Font Awesome in `<head>`, **zero staging references**. Test page deleted afterwards.
+
+---
+
+## 2026-07-26 — Site live: theme activated, 40 torts imported and verified
+
+**Type:** `feat` / `fix` · **Branch:** `fix/taxonomy-template` · **Tag:** `phase-3-live`
+
+### What changed
+
+- Created a Windows directory junction from the Studio site's `wp-content/themes/` to the repo theme
+- Installed Hello Elementor 3.4.9, Elementor 4.2.0, ACF 6.8.6
+- Activated the child theme — **first execution of any of this code**
+- Set permalinks to `/%postname%/`
+- Added a WP-CLI command `glm import-torts [--dry-run]`, sharing the admin page's code path
+- Imported all 40 torts
+- **Fixed:** added `taxonomy-tort_category.php`
+
+### Environment
+
+WordPress 7.0.2, PHP 8.4, SQLite, `http://localhost:8882/`.
+
+### The bug worth recording
+
+`/mass-torts/type/pharma/` rendered the parent theme's generic archive — wrong heading, **zero cards**.
+
+The cause was an assumption I had written into `archive-tort.php`'s docblock **as if it were fact**: that a taxonomy archive falls back to `archive-{post_type}.php`. It does not. WordPress's hierarchy runs `taxonomy-{tax}-{term}.php` → `taxonomy-{tax}.php` → `taxonomy.php` → `archive.php` → `index.php`, and never touches the post-type archive.
+
+Fixed with a delegating `taxonomy-tort_category.php` that requires `archive-tort.php`, so there is still one template to edit (**R4**).
+
+> **The lesson is not about the template hierarchy.** It is that a comment asserting how a framework behaves is worth exactly as much as a comment asserting anything else — nothing, until it runs. This shipped lint-clean and returned HTTP 200 while being completely wrong. The corrected docblock now says what breaks if the delegating file is deleted.
+
+### Verification — measured, not assumed
+
+| Check | Result |
+|---|---|
+| Torts imported | 40 |
+| Category split | pharma 10 · device 11 · toxic 6 · product 4 · abuse 5 · tech 4 |
+| Status split | active 28 · emerging 6 · settling 5 · appellate 1 |
+| Featured | 5 |
+| Empty ACF fields | none |
+| `/mass-torts/` | 40 cards, 6 tabs, 6 panels, 40 badges/pills/MDL/settlement |
+| Archive H1 | **"40 Active Mass Tort Cases"** — computed |
+| 6 taxonomy archives | correct counts, no cross-contamination |
+| Single page | H1, pill, status, breadcrumb, both facts, 3 related, disclaimer |
+| **Full URL sweep** | **40/40 return HTTP 200, zero failures** |
+| PHP errors from our code | none |
+
+The archive H1 is the point of the whole exercise: the source hardcoded "35" in two places and was wrong by five. That number is now `wp_count_posts()` and cannot drift.
+
+### Correction to an earlier note
+
+`learning.md` previously warned that Studio's SQLite meant go-live would be a content migration rather than a database copy. **That was wrong.** `studio export <file>.sql --mode db` produces a MySQL-compatible dump that imports into any MySQL or MariaDB host. Corrected in `learning.md`.
+
+---
+
+## 2026-07-26 — Tort content extracted and importer built
+
+**Type:** `feat` · **Branch:** `feat/tort-importer`
+
+### What changed
+
+- Added `themes/hello-elementor-child/data/torts.json` — all 40 torts, extracted programmatically from the source HTML
+- Added `inc/importer.php` — a **Tools → Import Torts** admin page, idempotent, defaulting to dry run
+- Wired the importer into `functions.php`, admin-only
+
+### Why
+
+40 torts × 8 fields is **320 values**. Hand-entering them is exactly the grind that introduces the drift this project exists to prevent (**R14** — the correct path must be the easy one). Extracting programmatically also makes the seed content version-controlled and reviewable, so a mistake is a diff rather than an archaeology exercise.
+
+### How the extraction went
+
+Written as a throwaway PHP script using `DOMDocument`/`DOMXPath`, run against `source/glmasstorts.html`. It deduplicates the three tab panels that appear twice in the source, and skips the "coming soon" placeholder cards.
+
+Result: **40 unique torts**, matching the source's own per-category counts exactly (10 pharma, 11 device, 6 toxic, 4 product, 5 abuse, 4 tech). Field completeness is 40/40 on title, description, status label, MDL reference, and settlement estimate.
+
+**One bug worth recording.** The first run set every status to `badge`. The source markup is `class="status-badge status-settling"`, and a naive first-match regex on `status-` returns `badge`. Fixed by collecting all matches and dropping known non-values. Caught only because the output was checked against expectations rather than assumed correct — a reminder that a scraper that runs without error is not the same as a scraper that is right.
+
+### Importer design
+
+Idempotent by a `_glm_import_key` post meta derived from the title, so re-running updates rather than duplicates. Uses `update_field()` when ACF is present so the field-key references are written correctly, and falls back to raw post meta when it is not.
+
+> **Known trade-off:** a re-run overwrites manual edits. Acceptable while the content is still seed data; once real copy is written on top, the JSON becomes the place to edit, or the importer stops being used.
+
+### Verification
+
+All 8 PHP files pass `php -l` on 8.3.32. Seed file parses, 40 records, 30.9 KB. **Not yet run against WordPress.**
+
+---
+
+## 2026-07-26 — Phase 2/3 (partial): child theme scaffold
+
+**Type:** `feat` · **Branch:** `feat/child-theme-scaffold` · **Tag:** `phase-2-theme-scaffold`
+
+### What changed
+
+Built the complete child theme ahead of the WordPress environment, since it is all files and none of it needs WordPress running to be written.
+
+- `style.css` — theme header plus every design token as a CSS custom property, renamed by role
+- `functions.php` — enqueues, ACF JSON sync, one-time rewrite flush, `glm_field()` safe accessor, missing-ACF admin notice
+- `inc/post-types.php` — `tort`, `location`, `result`
+- `inc/taxonomies.php` — `tort_category`, `tort_status`, with 11 terms seeded once
+- `inc/parts/tort-card.php` — the card, designed once
+- `inc/tort-grid.php` — `[glm_tort_grid]`, `[glm_tort_count]`, `[glm_tort_options]`
+- `acf-json/` — three field groups as version-controlled files
+- `assets/css/components.css` — component styles, tokens only, no raw hex
+- `assets/js/tort-tabs.js` — ARIA tabs with arrow-key support and a no-JS fallback
+- `single-tort.php` — one file, forty pages
+- `archive-tort.php` — `/mass-torts/` and the category archives
+- `themes/hello-elementor-child/README.md` — install steps, shortcode reference, gotchas
+
+### Why
+
+Studio was not yet wired up, but the theme is just files. Building it now meant the environment was never the bottleneck. All of it is in git, ready to activate.
+
+### Verification
+
+All 7 PHP files pass `php -l` on PHP 8.3.32. All 3 ACF JSON files parse. **Nothing has been executed against WordPress yet** — a debugging pass on first activation is expected and planned.
+
+### Decisions made
+
+- **Tort grid renderer:** custom `[glm_tort_grid]` shortcode. Elementor Free has no ACF dynamic tags and 6 of the card's 8 fields are ACF fields, so no free widget can render it. Owning it in the theme also puts the site's most complex component into git rather than `postmeta` — a direct win against R12.
+- **URL scheme locked:** `/mass-torts/{slug}/`, categories at `/mass-torts/type/{cat}/`. Deliberately `type` and not `category`, which would read as core's post category.
+- **Local environment changed** from LocalWP to **WordPress Studio**, which was already installed. Brings a SQLite caveat — go-live becomes a content migration rather than a database copy. Recorded in `learning.md`.
+- **Repo ↔ Studio link:** Windows directory junction, because `mklink /J` needs no admin rights.
+
+### Design note worth keeping
+
+`tort_status` is a **taxonomy and an ACF text field together**. The source had 27 distinct status strings ("Active · Filing Now", "Settling · $1B+ Fund") across only 5 colours. The taxonomy carries the colour; the text field carries the wording. Modelling 27 terms would mean maintaining 27 colours; modelling it as free text alone would lose the colour logic. Worth remembering as a general shape: when a value has *many labels but few behaviours*, split it.
+
+### Open
+
+- Studio site path not yet provided, so the junction is not created
+- Header, footer, location and result renderers, and form integration remain
+
+---
+
+## 2026-07-26 — Phase 1: component inventory
+
+**Type:** `docs` · **Branch:** `docs/component-inventory` · **Tag:** `phase-1-inventory`
+
+### What changed
+
+- Added `source/glmasstorts.html` (123 KB, 1,822 lines) — the design reference
+- Wrote `docs/component-inventory.md` — 14 components, 3 CPTs with full field lists, 5 source defects, and the tort-grid decision
+- Wrote `docs/design-tokens.md` — colour palette, type scale, spacing, breakpoints, assets needing re-hosting
+- Wrote `docs/page-map.md` — 10 pages, URL scheme, navigation mapping, component usage matrix
+- Updated `README.md` and `docs/README.md` to reflect Phase 1 completion
+
+### Why
+
+The source had to be understood as a **component system** before any WordPress work began. Porting it section by section is the trap that produces an unmaintainable site.
+
+### What the analysis found
+
+The site is **one page containing 14 distinct components and 40 pieces of repeating data** — not twenty pages of markup. Splitting it produces **10 hand-built pages plus 46 generated ones**.
+
+**Five defects in the source**, two of which are this project's founding problem caught in the act:
+
+1. **18 duplicated tort cards.** Three tab panels appear twice with duplicate `id` attributes. Since `showTab()` uses `getElementById()`, the second copy of each renders into the DOM but can never display. 60 `<h4>` elements, only 42 unique. Copy-paste drift, invisible, shipping for months.
+2. **The tort count is wrong.** The page says "35+" in two hardcoded places; there are 40. Someone added five and did not update the counter.
+3. **"About Us" links to the wrong section.** `id="about"` sits on Divisions; the About section has no id at all.
+4. **Malformed CSS comments** (`/* … /`, `/ … */`) silently swallow the rules that follow, so parts of the stylesheet are inert. Rebuild from intent, not from a byte-for-byte port.
+5. **Every image is hotlinked from staging servers** — two different ones for the same logo. When either staging site is pruned, the production logo disappears.
+
+Defects 1 and 2 are precisely why **R4** (shortcode-synced templates, never copy-paste) and **R5** (repeating data in the database) exist. Under those rules neither failure is possible: a shortcode template cannot drift from itself, and `wp_count_posts()` cannot be stale.
+
+### Also discovered
+
+The file is a **Claude Artifact export**, not a website export. Lines 1–235 are sandbox runtime — `window.claude`, `postMessage` plumbing, a `fetch` override, and `<body id="artifacts-component-root-html">`. Discarded entirely.
+
+The design tokens are already CSS custom properties, which is good practice — but the **names are lies**. `--gold` is `#506CFB`, an indigo blue. A rebrand changed the values and left the names, and `#c8a84b` (real gold) still appears hardcoded in places, bypassing the variables. Renaming to role-based names (`--color-accent`) during migration, because it is free now and expensive later.
+
+### Decision raised, not yet made
+
+**How to build the tort grid.** Elementor Free has no ACF dynamic tags, and six of the tort card's eight fields are ACF fields, so no free grid widget can render it. Recommended a custom `[glm_tort_grid]` shortcode in the child theme — roughly 120 lines of PHP that put the site's most complex component into version control, which is a direct win against **R12**. Alternatives documented in `docs/component-inventory.md` §5.
+
+---
+
+## 2026-07-26 — Phase 0: repository foundation
+
+**Type:** `chore` · **Branches:** `main`, `chore/repo-foundation` · **Tag:** `phase-0-foundations`
+
+### What changed
+
+- Renamed the default branch from `master` to `main`
+- Added `.gitignore`, scoped to what this repo actually tracks: the child theme, docs, source reference, and Elementor exports
+- Added `.gitmessage` commit template and wired it up with `git config --local commit.template .gitmessage`
+- Added `.gitattributes` to normalise line endings
+- Created `CLAUDE.md` — standing instructions so working preferences never need restating
+- Created `learning.md` — decisions log, working principles, and the 14-rule build ruleset
+- Created `project_history.md` — this file
+- Rewrote `README.md` as a real project document
+- Scaffolded `docs/`, `source/`, `exports/`, `themes/`
+
+### Why
+
+Version control and an enforced commit format had to exist before any WordPress work, so every later change is traceable, revertable, and carries its rationale. The repository had zero commits at the start of this session.
+
+The documentation set was created up front rather than retrofitted because the project's whole purpose is avoiding an unmaintainable mess — and undocumented conventions are how conventions get abandoned.
+
+### Notes
+
+- Repo currently holds **no WordPress code**. LocalWP is not yet installed. Phase 0 is deliberately environment-independent so that architecture and documentation could be settled first.
+- `.gitignore` includes `desktop.ini` because this workspace sits inside OneDrive, which generates one in every synced folder.
+
+---
+
+## 2026-07-25 — Planning session: architecture and ruleset agreed
+
+**Type:** `docs` · No code changes
+
+### What changed
+
+Full architecture settled through a structured decision process. Eight decisions locked, recorded in [learning.md](learning.md) Part 1.
+
+Headlines:
+
+- **Elementor Free** as the builder, on a zero budget
+- **Hello Elementor + child theme** as the base
+- Repo tracks child theme, docs, source and exports only
+- **LocalWP** for development
+- Commit messages anonymous; author field unchanged
+- No role-based editor restriction
+
+### Why
+
+The brief was to convert one long HTML file into a maintainable multi-page WordPress site that non-technical staff can manage, without recreating a specific known failure: sections with icon, title and description crammed into a single text box and separated by hand-edited markup.
+
+The reframe that shaped everything: **the problem is not which builder, it is whether the correct action is easier than the hacky one.** Nobody builds a mess deliberately — they build one when adding a fourth card properly is harder than typing it into an existing box.
+
+### Two reversals worth remembering
+
+**Bricks → Elementor Free.** Bricks was chosen first for its clean output and global-class design system. It was reversed on discovering it is licence-only with no free tier, once the zero-budget constraint was stated. Worth noting: the constraint pushed the design toward platform-native primitives, which is generally the more durable direction.
+
+**R7 removed.** The original ruleset required editors to have content-only access — technically able to change words, technically unable to change structure. Elementor Free has no Role Manager, and role-based discrimination was ruled out. Rather than pretend the rule still held, it was deleted and its intent rehomed into **R14 — make the correct action the easiest action**, with **R5** (repeating data in custom post types) carrying the practical weight.
+
+### Open at end of session
+
+- Source HTML not yet placed in `source/` — **blocks Phase 1**
+- Essential Addons Lite vs Happy Addons free — pick exactly one in Phase 2
+- Verify on install: Saved Template shortcodes present, Flexbox Container available

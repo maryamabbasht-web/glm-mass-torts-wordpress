@@ -1,0 +1,125 @@
+/*
+Theme Name:   GLM Mass Torts
+Theme URI:    https://www.glmasstorts.com/
+Description:  Child theme of Hello Elementor for GL Mass Torts. Holds design tokens, custom post types, and the tort grid renderer.
+Author:       Ged Lawyers
+Template:     hello-elementor
+Version:      0.1.0
+Text Domain:  glm
+*/
+
+/* =============================================================
+   DESIGN TOKENS  (learning.md R1 — tokens before pixels)
+   -------------------------------------------------------------
+   Extracted from source/glmasstorts.html and RENAMED BY ROLE.
+
+   The source named these by appearance: --gold was #506CFB,
+   an indigo blue, because a rebrand changed the values and
+   left the names behind. Role-based names do not rot.
+
+   Prefixed --glm- to avoid collisions with Hello Elementor
+   and Elementor's own custom properties.
+   ============================================================= */
+
+:root {
+
+  /* ── Brand ─────────────────────────────────────────────── */
+  --glm-primary:        #201e6b;  /* was --navy-2  · dark surface: nav, hero, divisions, footer */
+  --glm-accent:         #506CFB;  /* was --gold    · rules, tags, borders, active states */
+  --glm-accent-light:   #DBE1FB;  /* was --gold-light */
+  --glm-accent-pale:    #dfe6fe;  /* was --gold-pale  · card backgrounds, active tab */
+  --glm-cta:            #01C53D;  /* was --call    · phone + submit buttons ONLY */
+
+  /* ── Neutrals ──────────────────────────────────────────── */
+  --glm-ink:            #0b1929;  /* was --navy / --text */
+  --glm-surface:        #eff7f8;  /* was --cream   · page background */
+  --glm-surface-deep:   #0b1929;  /* contact section, category headers */
+  --glm-text-muted:     #5a6a7e;  /* was --muted */
+  --glm-white:          #ffffff;
+
+  /* --border was a duplicate of --gold; collapsed into --glm-accent.
+     --navy-3 (#1a3560) and --red (#b91c1c) were declared but unused. */
+
+  /* ── Status badge colours (5 states) ───────────────────── */
+  --glm-status-active-bg:     #dcfce7;
+  --glm-status-active-fg:     #15803d;
+  --glm-status-active-dot:    #16a34a;
+
+  --glm-status-settling-bg:   #fef3c7;
+  --glm-status-settling-fg:   #92400e;
+  --glm-status-settling-dot:  #d97706;
+
+  --glm-status-emerging-bg:   #e0f2fe;
+  --glm-status-emerging-fg:   #0369a1;
+  --glm-status-emerging-dot:  #0284c7;
+
+  --glm-status-appellate-bg:  #f3e8ff;
+  --glm-status-appellate-fg:  #7e22ce;
+  --glm-status-appellate-dot: #9333ea;
+
+  --glm-status-inactive-bg:   #8080806a;
+  --glm-status-inactive-fg:   #1f2937;
+  --glm-status-inactive-dot:  #6b7280;
+
+  /* ── Category pill colours (6 categories) ──────────────── */
+  --glm-pill-pharma-bg:   #e8f0fe;  --glm-pill-pharma-fg:   #1a56c7;
+  --glm-pill-device-bg:   #e8f8ee;  --glm-pill-device-fg:   #166534;
+  --glm-pill-toxic-bg:    #dfe6fe;  --glm-pill-toxic-fg:    #201e6b;
+  --glm-pill-product-bg:  #fef3c7;  --glm-pill-product-fg:  #92400e;
+  --glm-pill-abuse-bg:    #fde8e8;  --glm-pill-abuse-fg:    #9b1c1c;
+  --glm-pill-tech-bg:     #f0e8ff;  --glm-pill-tech-fg:     #6b21a8;
+
+  /* ── Typography ────────────────────────────────────────── */
+  --glm-font-display: 'Roboto Slab', Georgia, serif;
+  --glm-font-body:    'Mulish', system-ui, -apple-system, sans-serif;
+
+  /* Type scale — collapsed from the 17 ad-hoc sizes in the source
+     to a defined 9-step scale. See docs/design-tokens.md. */
+  --glm-text-2xs: 0.625rem;  /* 10px · eyebrows, status badges  */
+  --glm-text-xs:  0.6875rem; /* 11px · form labels              */
+  --glm-text-sm:  0.8125rem; /* 13px · card body                */
+  --glm-text-base:1rem;      /* 16px · body copy                */
+  --glm-text-lg:  1.0625rem; /* 17px · hero lead                */
+  --glm-text-xl:  1.1875rem; /* 19px · card headings            */
+  --glm-text-2xl: 1.375rem;  /* 22px · sub-headings             */
+  --glm-text-3xl: 1.5rem;    /* 24px · division titles          */
+  --glm-text-4xl: 2rem;      /* 32px · verdict amounts          */
+
+  --glm-h1: clamp(2.625rem, 5.5vw, 4.75rem); /* 42 → 76px */
+  --glm-h2: clamp(1.875rem, 4vw, 3.125rem);  /* 30 → 50px */
+
+  --glm-leading-tight: 1.15;
+  --glm-leading-body:  1.65;
+  --glm-leading-loose: 1.8;
+
+  --glm-tracking-wide: 0.1875rem; /* 3px · uppercase eyebrows */
+
+  /* ── Spacing & layout ──────────────────────────────────── */
+  --glm-container:      1200px;
+  --glm-section-y:      5.625rem; /* 90px */
+  --glm-section-x:      3rem;     /* 48px */
+  --glm-section-y-sm:   3.75rem;  /* 60px */
+  --glm-section-x-sm:   1.5rem;   /* 24px */
+  --glm-card-pad:       1.875rem 1.75rem;
+  --glm-grid-gap:       2px;
+  --glm-radius:         2px;
+  --glm-radius-md:      5px;
+  --glm-radius-pill:    20px;
+  --glm-card-min:       320px;    /* tort grid auto-fill minimum */
+}
+
+/* -------------------------------------------------------------
+   Breakpoint note (R8)
+   The source breaks at 900px, NOT Elementor's default 767px.
+   Set Site Settings → Layout → Breakpoints to match, or the
+   768–900px band breaks. Media queries here use 900px.
+   ------------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  :root {
+    --glm-section-y: var(--glm-section-y-sm);
+    --glm-section-x: var(--glm-section-x-sm);
+  }
+}
+
+/* Component styles live in assets/css/components.css (R9). */

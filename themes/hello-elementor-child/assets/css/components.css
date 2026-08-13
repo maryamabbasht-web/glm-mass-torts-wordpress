@@ -1,0 +1,2741 @@
+/* =============================================================
+   GLM COMPONENTS
+   -------------------------------------------------------------
+   Every value below references a token from style.css.
+   No raw hex, no arbitrary px (learning.md R1, R9).
+
+   -------------------------------------------------------------
+   ONE SOURCE OF TRUTH — HOW ELEMENTOR IS NEUTRALISED
+   -------------------------------------------------------------
+   Elementor ships its own design system and it CANNOT be removed.
+   Verified three ways: clearing system_typography has no effect,
+   clearing every global makes Elementor restore the four slots,
+   and defining font-family alone still leaves font-size defined.
+
+   It always writes kit defaults into a per-section CSS file for
+   every widget type on the page:
+
+       .elementor-widget-heading .elementor-heading-title { … }
+       .elementor-widget-button  .elementor-button        { … }
+
+   Two classes — specificity (0,2,0) — printed in the <body>, AFTER
+   this stylesheet loads in the <head>. So an equal-specificity rule
+   of ours loses on document order alone. Silently: no error, the
+   styling simply never applies.
+
+   Fighting that rule-by-rule is a truce, not an architecture. So
+   there is ONE neutralisation layer below. After it, Elementor's
+   design system still exists but has NO EFFECT, and GLM tokens are
+   the only thing deciding appearance.
+
+   THE INVARIANT
+   -------------
+   Derived from a full audit of every widget in use — see
+   docs/elementor-compatibility.md.
+
+     1. GLM classes live on the WIDGET ROOT (.elementor-widget-*).
+        That is where the generator puts them.
+
+     2. The neutralisation layer only ever targets elements
+        Elementor renders INSIDE a widget. Never the root.
+
+     3. Where Elementor styles the widget ROOT — currently only
+        text-editor — the GLM rules carry the `html` prefix to
+        out-specify it instead.
+
+     4. Where a widget out-specifies us beyond reach — HFE's nav
+        menu reaches (0,6,1) — we render it ourselves.
+
+   WHICH APPLIES TO WHICH
+   ----------------------
+     heading      inner  → reset, inherit    ✓
+     button       inner  → reset + prefix for background/padding
+     text-editor  ROOT   → prefix only, NEVER reset
+     image        inner  → no conflict (captions unused)
+     nav-menu     inner  → incompatible, replaced by glm_nav()
+
+   Before adding a new widget type, check where Elementor styles it
+   and follow the matching row. `wp glm audit` enforces this.
+   ============================================================= */
+
+
+/* =============================================================
+   ELEMENTOR NEUTRALISATION LAYER
+   -------------------------------------------------------------
+   Do not add component styling here. This block exists only to
+   stop Elementor's kit defaults reaching the page.
+
+   `html` prefix = specificity (0,2,1), which beats Elementor's
+   (0,2,0) regardless of which stylesheet loads first.
+   ============================================================= */
+
+/* Widgets where Elementor styles an element INSIDE the widget.
+   Resetting to `inherit` makes them pick up the GLM class on the
+   widget root. See docs/elementor-compatibility.md for the audit. */
+html .elementor-widget-heading .elementor-heading-title,
+html .elementor-widget-button .elementor-button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+/* text-editor is NOT in the list above, deliberately.
+   -----------------------------------------------------------
+   Elementor styles `.elementor-widget-text-editor` — the widget
+   ROOT — which is the same element our GLM class sits on. A reset
+   there would out-specify our own component rules and suppress
+   them on all 21 text-editor widgets.
+
+   Instead those component rules carry the `html` prefix so they
+   reach (0,1,1) and beat Elementor's (0,1,0). Inner <p> and <li>
+   then inherit from the root as normal. */
+
+/* Elementor zeroes heading margins itself; keep that after the reset. */
+html .elementor-widget-heading .elementor-heading-title {
+  margin: 0;
+}
+
+
+/* =============================================================
+   HELLO ELEMENTOR RESET OVERRIDES
+   -------------------------------------------------------------
+   The parent theme's reset.css ships its own brand palette and
+   applies it to every bare link and button:
+
+     a                       { color: #c36 }              (0,0,1)
+     a:active, a:hover       { color: #336 }              (0,1,1)
+     button, [type=button],
+     [type=submit]           { color/border: #c36 }       (0,0,1)/(0,1,0)
+     …:hover, …:focus        { background: #c36 }         (0,1,1)/(0,2,0)
+
+   Pink links and pink buttons wherever a component class does not
+   already cover the element — post content, legal pages, search
+   results, and any bare <button>.
+
+   WHY MATCHING SPECIFICITY IS ENOUGH HERE, WITH NO `html` PREFIX:
+   these selectors are matched exactly, so the cascade falls to
+   document order — and that order is GUARANTEED, not incidental.
+   functions.php declares glm-tokens as dependent on the
+   'hello-elementor' handle, and glm-components on glm-tokens, so
+   WordPress must emit reset.css first. Adding specificity we do
+   not need would only make component rules harder to write.
+
+   Placed BEFORE the component sections on purpose: everything
+   below is free to override it on equal specificity.
+   ============================================================= */
+
+a {
+  color: var(--glm-accent);
+  text-decoration: none;
+}
+
+a:hover,
+a:active,
+a:focus-visible {
+  color: var(--glm-primary);
+  text-decoration: underline;
+}
+
+/* Buttons are neutralised rather than restyled — the GLM button
+   classes supply appearance. Left alone: padding, font-size and
+   white-space, which are layout defaults nothing conflicts with. */
+button,
+[type="button"],
+[type="reset"],
+[type="submit"] {
+  color: inherit;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+button:hover,
+button:focus,
+[type="button"]:hover,
+[type="button"]:focus,
+[type="reset"]:hover,
+[type="reset"]:focus,
+[type="submit"]:hover,
+[type="submit"]:focus {
+  color: inherit;
+  background-color: transparent;
+  text-decoration: none;
+}
+
+
+/* ── Container direction ─────────────────────────────────
+   A THIRD conflict mechanism, different from the two above.
+
+   Elementor lays containers out through a custom property, not a
+   plain declaration:
+
+     .e-con.e-flex      { --flex-direction: column; }      (0,2,0)
+     .e-con-full.e-flex { flex-direction: var(--flex-direction); }  (0,2,0)
+
+   So `.glm-header__inner { flex-direction: row }` at (0,1,0) never
+   had a chance — it loses to the consumer rule on specificity, and
+   the real decision was made by the variable anyway.
+
+   Fighting the consumer would mean out-specifying every rule that
+   reads the variable. Setting the VARIABLE instead is one
+   declaration, and every consumer picks it up.
+
+   `html .glm-block .glm-block__element` = (0,2,1). Ties Elementor
+   on classes, wins on the extra element. No !important, no
+   dependency on Elementor's own class names.
+
+   NO LEAKAGE: custom properties inherit, but Elementor resets
+   `--flex-direction: initial` on EVERY .elementor-element — widgets
+   included — and a directly-applied declaration always beats an
+   inherited one. So this reaches only the elements named here.
+
+   All container direction is set in this one block. Do not add
+   `flex-direction` to these classes elsewhere; it will silently
+   lose and mislead the next reader. */
+
+html .glm-header .glm-header__inner,
+html .glm-header .glm-header__actions,
+html .glm-hero .glm-hero__actions,
+html .glm-stats .glm-stats__inner {
+  --flex-direction: row;
+}
+
+/* Stats stack below the breakpoint — same mechanism, same
+   specificity, so it cleanly overrides the rule above. */
+@media (max-width: 900px) {
+  html .glm-stats .glm-stats__inner {
+    --flex-direction: column;
+  }
+}
+
+
+/* ── Tab bar ─────────────────────────────────────────────── */
+
+.glm-tort-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--glm-grid-gap);
+  margin-bottom: 3px;
+}
+
+.glm-tort-tab {
+  padding: 0.625rem 1.25rem;
+  font-family: var(--glm-font-body);
+  font-size: var(--glm-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--glm-ink);
+  background: var(--glm-accent-pale);
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* Background restated on hover: the Hello reset override above
+   neutralises button backgrounds at :hover, so a component that
+   wants one must say so for that state too. */
+.glm-tort-tab:hover,
+.glm-tort-tab:focus-visible {
+  background: var(--glm-accent-pale);
+  border-bottom-color: var(--glm-accent);
+}
+
+.glm-tort-tab.is-active {
+  background: var(--glm-accent-pale);
+  border-bottom-color: var(--glm-accent);
+  color: var(--glm-primary);
+}
+
+/* No-JS fallback: every panel stays visible, so the tab bar would
+   be misleading. Hide it until the script marks the browser ready. */
+.glm-tort-browser:not(.glm-js-ready) .glm-tort-panel[hidden] {
+  display: block;
+}
+
+
+/* ── Category header bar ─────────────────────────────────── */
+
+.glm-cat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1.25rem 2rem;
+  margin-bottom: var(--glm-grid-gap);
+  background: var(--glm-surface-deep);
+  color: var(--glm-white);
+}
+
+.glm-cat-header__title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-2xl);
+  font-weight: 700;
+}
+
+.glm-cat-header__count {
+  font-size: var(--glm-text-xs);
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--glm-accent-light);
+}
+
+
+/* ── Grid ────────────────────────────────────────────────── */
+
+.glm-tort-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--glm-card-min), 1fr));
+  gap: var(--glm-grid-gap);
+  background: var(--glm-white);
+}
+
+/* ── Homepage-only: fixed two-column featured grid ────────
+   Scoped to .glm-section-shell, which exists only in the homepage
+   definition. The archive and taxonomy templates render the same
+   grid outside that wrapper and keep the auto-fill behaviour above.
+
+   Only the overridden properties are restated — display, gap and
+   background all inherit from the rule above.
+
+   (0,2,0) beats the base (0,1,0), so no !important and no reliance
+   on source order. */
+
+.glm-section-shell .glm-tort-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* Featured cards span two columns by default, which in a two-column
+   grid means one card per row — the opposite of what is wanted here.
+   Reset the span so they tile 2-up. */
+.glm-section-shell .glm-tort-card--featured {
+  grid-column: span 1;
+
+  /* The default 1fr/280px split assumes a full-width card. At half
+     width the stat panel would leave roughly 150px for the title and
+     copy, so it stacks instead — the same treatment the card already
+     gets below 900px. */
+  grid-template-columns: 1fr;
+}
+
+@media (max-width: 900px) {
+  .glm-section-shell .glm-tort-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ── Card ────────────────────────────────────────────────── */
+
+.glm-tort-card {
+  position: relative;
+  display: block;
+  padding: var(--glm-card-pad);
+  background: var(--glm-accent-pale);
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  transition: background 0.18s;
+}
+
+.glm-tort-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 3px;
+  background: var(--glm-accent);
+  transition: width 0.3s;
+}
+
+.glm-tort-card:hover::after,
+.glm-tort-card:focus-visible::after {
+  width: 100%;
+}
+
+.glm-tort-card__meta {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 0.625rem;
+}
+
+.glm-tort-card__title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-xl);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--glm-primary);
+  margin: 0 0 0.625rem;
+}
+
+.glm-tort-card__desc {
+  font-size: var(--glm-text-sm);
+  font-weight: 300;
+  line-height: var(--glm-leading-loose);
+  color: var(--glm-text-muted);
+  margin: 0;
+}
+
+.glm-tort-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin-top: 1.125rem;
+  padding-top: 0.875rem;
+  border-top: 1px solid var(--glm-accent);
+}
+
+.glm-tort-card__mdl {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--glm-text-2xs);
+  font-weight: 500;
+  color: var(--glm-text-muted);
+}
+
+.glm-tort-card__settlement {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: var(--glm-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--glm-primary);
+  background: var(--glm-accent-pale);
+  border: 1px solid var(--glm-accent);
+  border-radius: var(--glm-radius);
+  padding: 4px 10px;
+}
+
+
+/* ── Featured card variant ───────────────────────────────── */
+
+.glm-tort-card--featured {
+  grid-column: span 2;
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 2.5rem;
+  align-items: center;
+  padding: 2.5rem;
+  background: var(--glm-surface-deep);
+}
+
+.glm-tort-card--featured .glm-tort-card__title {
+  color: var(--glm-white);
+  font-size: var(--glm-text-3xl);
+}
+
+.glm-tort-card--featured .glm-tort-card__desc {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.glm-tort-card--featured .glm-tort-card__footer {
+  border-top-color: rgba(255, 255, 255, 0.12);
+}
+
+.glm-tort-card--featured .glm-tort-card__mdl {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.glm-tort-card__stat {
+  padding: 1.5rem;
+  text-align: center;
+  background: var(--glm-accent-pale);
+  border: 1px solid var(--glm-accent);
+  border-radius: 3px;
+}
+
+.glm-tort-card__stat-num {
+  display: block;
+  font-family: var(--glm-font-display);
+  font-size: 2.625rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--glm-primary);
+}
+
+.glm-tort-card__stat-lbl {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: var(--glm-text-xs);
+  line-height: 1.5;
+  color: var(--glm-ink);
+}
+
+
+/* ── Category pills ──────────────────────────────────────── */
+
+.glm-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: var(--glm-radius);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.glm-pill--pharma  { background: var(--glm-pill-pharma-bg);  color: var(--glm-pill-pharma-fg); }
+.glm-pill--device  { background: var(--glm-pill-device-bg);  color: var(--glm-pill-device-fg); }
+.glm-pill--toxic   { background: var(--glm-pill-toxic-bg);   color: var(--glm-pill-toxic-fg); }
+.glm-pill--product { background: var(--glm-pill-product-bg); color: var(--glm-pill-product-fg); }
+.glm-pill--abuse   { background: var(--glm-pill-abuse-bg);   color: var(--glm-pill-abuse-fg); }
+.glm-pill--tech    { background: var(--glm-pill-tech-bg);    color: var(--glm-pill-tech-fg); }
+
+
+/* ── Status badges ───────────────────────────────────────── */
+
+.glm-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--glm-radius-pill);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.glm-status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.glm-status--active    { background: var(--glm-status-active-bg);    color: var(--glm-status-active-fg); }
+.glm-status--settling  { background: var(--glm-status-settling-bg);  color: var(--glm-status-settling-fg); }
+.glm-status--emerging  { background: var(--glm-status-emerging-bg);  color: var(--glm-status-emerging-fg); }
+.glm-status--appellate { background: var(--glm-status-appellate-bg); color: var(--glm-status-appellate-fg); }
+.glm-status--inactive  { background: var(--glm-status-inactive-bg);  color: var(--glm-status-inactive-fg); }
+
+.glm-status--active .glm-status__dot    { background: var(--glm-status-active-dot); }
+.glm-status--settling .glm-status__dot  { background: var(--glm-status-settling-dot); }
+.glm-status--emerging .glm-status__dot  { background: var(--glm-status-emerging-dot); }
+.glm-status--appellate .glm-status__dot { background: var(--glm-status-appellate-dot); }
+.glm-status--inactive .glm-status__dot  { background: var(--glm-status-inactive-dot); }
+
+.glm-tort-card--featured .glm-status,
+.glm-tort-card--featured .glm-tort-card__settlement {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--glm-accent);
+  color: var(--glm-accent-light);
+}
+
+
+/* ── Responsive (R8 — 900px, matching the source) ────────── */
+
+@media (max-width: 900px) {
+
+  .glm-tort-card--featured {
+    grid-column: span 1;
+    grid-template-columns: 1fr;
+    padding: 1.75rem;
+  }
+
+  .glm-tort-tab {
+    padding: 8px 12px;
+    font-size: var(--glm-text-xs);
+  }
+
+  .glm-cat-header {
+    padding: 1rem 1.25rem;
+  }
+}
+
+
+/* ── Shared: eyebrow ─────────────────────────────────────── */
+
+.glm-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: var(--glm-text-2xs);
+  font-weight: 600;
+  letter-spacing: var(--glm-tracking-wide);
+  text-transform: uppercase;
+  color: var(--glm-accent);
+  margin-bottom: 0.875rem;
+}
+
+.glm-eyebrow::before {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 1px;
+  background: currentColor;
+}
+
+
+/* ── Archive: /mass-torts/ ───────────────────────────────── */
+
+/* Two names, one rule — no duplicated declarations.
+   `.glm-archive` is the tort archive template's wrapper.
+   `.glm-section-shell` is the same layout used by page content that
+   needs to line up with the section templates: container width plus
+   standard section padding. Added for the homepage tort block, which
+   otherwise ran full-bleed while every neighbouring section was
+   constrained. Kept as one rule so the two cannot drift; split them
+   if the archive ever needs different spacing. */
+.glm-archive,
+.glm-section-shell {
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: var(--glm-section-y) 0;
+}
+
+.glm-archive__title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h2);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-primary);
+  margin: 0 0 1rem;
+}
+
+.glm-archive__title em {
+  font-style: italic;
+  color: var(--glm-accent);
+}
+
+.glm-archive__desc {
+  max-width: 65ch;
+  font-size: var(--glm-text-base);
+  font-weight: 300;
+  color: var(--glm-text-muted);
+  margin: 0 0 2rem;
+}
+
+.glm-archive__header {
+  margin-bottom: 3.25rem;
+}
+
+.glm-archive__disclaimer,
+.glm-tort-single__disclaimer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--glm-accent);
+  font-size: var(--glm-text-xs);
+  font-style: italic;
+  line-height: 1.6;
+  color: var(--glm-text-muted);
+}
+
+
+/* ── Single tort: /mass-torts/{slug}/ ────────────────────── */
+
+.glm-tort-single {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: var(--glm-section-y) var(--glm-section-x);
+}
+
+.glm-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: var(--glm-text-xs);
+  color: var(--glm-text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.glm-breadcrumb a {
+  color: var(--glm-text-muted);
+  text-decoration: none;
+}
+
+.glm-breadcrumb a:hover,
+.glm-breadcrumb a:focus-visible {
+  color: var(--glm-accent);
+  text-decoration: underline;
+}
+
+.glm-tort-single__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.glm-tort-single__title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h2);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-primary);
+  margin: 0 0 1.5rem;
+}
+
+.glm-tort-single__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--glm-grid-gap);
+  margin: 0 0 2.5rem;
+  background: var(--glm-accent);
+  border: 1px solid var(--glm-accent);
+}
+
+.glm-fact {
+  background: var(--glm-accent-pale);
+  padding: 1.25rem 1.5rem;
+}
+
+.glm-fact dt {
+  font-size: var(--glm-text-2xs);
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--glm-text-muted);
+  margin-bottom: 0.375rem;
+}
+
+.glm-fact dd {
+  margin: 0;
+  font-size: var(--glm-text-sm);
+  font-weight: 600;
+  color: var(--glm-primary);
+}
+
+.glm-tort-single__content {
+  font-size: var(--glm-text-base);
+  font-weight: 300;
+  line-height: var(--glm-leading-loose);
+  color: var(--glm-ink);
+}
+
+.glm-tort-single__content > * + * {
+  margin-top: 1.25rem;
+}
+
+.glm-tort-single__form {
+  margin-top: 3rem;
+  padding: 2.5rem;
+  background: var(--glm-surface-deep);
+  color: var(--glm-white);
+  border-radius: var(--glm-radius-md);
+}
+
+.glm-tort-single__form h2 {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-3xl);
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.glm-tort-single__form p {
+  font-size: var(--glm-text-sm);
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0 0 1.75rem;
+}
+
+
+/* ── Related torts ───────────────────────────────────────── */
+
+.glm-related {
+  margin-top: 3.5rem;
+}
+
+.glm-related__heading {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-3xl);
+  font-weight: 700;
+  color: var(--glm-primary);
+  margin: 0 0 1.5rem;
+}
+
+
+/* ── Buttons ─────────────────────────────────────────────── */
+/* Shared by the hero and every later section. Elementor's button
+   widget wrapper is .elementor-button, so these override it. */
+
+html .glm-btn .elementor-button,
+a.glm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 1rem 2.25rem;
+  border: none;
+  border-radius: var(--glm-radius);
+  font-family: var(--glm-font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: filter 0.2s, transform 0.15s, background 0.2s, border-color 0.2s;
+}
+
+html .glm-btn--cta .elementor-button {
+  background: var(--glm-cta);
+  color: var(--glm-white);
+}
+
+html .glm-btn--cta .elementor-button:hover,
+html .glm-btn--cta .elementor-button:focus-visible {
+  background: var(--glm-cta);
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+html .glm-btn--outline .elementor-button {
+  background: transparent;
+  color: var(--glm-white);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-weight: 500;
+  text-transform: none;
+}
+
+html .glm-btn--outline .elementor-button:hover,
+html .glm-btn--outline .elementor-button:focus-visible {
+  border-color: var(--glm-accent);
+  background: rgba(80, 108, 251, 0.1);
+}
+
+
+/* ── Hero ────────────────────────────────────────────────── */
+
+.glm-hero {
+  position: relative;
+  padding: 6.25rem var(--glm-section-x) 3.125rem;
+  background: var(--glm-primary);
+  overflow: hidden;
+}
+
+/* The gold-to-accent rule across the top of the original hero. */
+.glm-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--glm-accent) 0%,
+    var(--glm-accent-light) 50%,
+    var(--glm-accent) 100%
+  );
+}
+
+.glm-hero__content {
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0;
+}
+
+.glm-hero .glm-eyebrow {
+  color: var(--glm-accent);
+}
+
+.glm-hero__title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h1);
+  font-weight: 700;
+  line-height: 1.07;
+  color: var(--glm-white);
+  margin: 0 0 1.5rem;
+}
+
+.glm-hero__title em {
+  font-style: italic;
+  color: var(--glm-accent-light);
+}
+
+html .glm-hero__lead {
+  max-width: 560px;
+  margin-bottom: 2.5rem;
+  font-size: var(--glm-text-lg);
+  font-weight: 300;
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.glm-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 0;
+}
+
+@media (max-width: 900px) {
+  .glm-hero {
+    padding: 3.75rem var(--glm-section-x) 2.5rem;
+  }
+}
+
+
+/* ── Case evaluation form (Contact Form 7) ───────────────── */
+
+.glm-form__row {
+  margin: 0 0 0.875rem;
+}
+
+.glm-form__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.875rem;
+}
+
+.glm-form label {
+  display: block;
+  font-size: var(--glm-text-xs);
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.glm-req {
+  color: var(--glm-accent);
+}
+
+.glm-form input[type="text"],
+.glm-form input[type="tel"],
+.glm-form input[type="email"],
+.glm-form select,
+.glm-form textarea {
+  width: 100%;
+  margin-top: 6px;
+  padding: 0.75rem 0.875rem;
+  font-family: var(--glm-font-body);
+  font-size: 0.875rem;
+  color: var(--glm-white);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1.5px solid var(--glm-accent);
+  border-radius: var(--glm-radius);
+  outline: none;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.glm-form textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.glm-form select option {
+  background: var(--glm-primary);
+  color: var(--glm-white);
+}
+
+.glm-form ::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.glm-form input:focus-visible,
+.glm-form select:focus-visible,
+.glm-form textarea:focus-visible {
+  border-color: var(--glm-cta);
+}
+
+.glm-form__submit input[type="submit"] {
+  padding: 0.9375rem 2.25rem;
+  font-family: var(--glm-font-body);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--glm-white);
+  background: var(--glm-cta);
+  border: none;
+  border-radius: var(--glm-radius-md);
+  cursor: pointer;
+  transition: filter 0.2s;
+}
+
+.glm-form__submit input[type="submit"]:hover {
+  filter: brightness(1.1);
+}
+
+.glm-form__disclaimer {
+  margin-top: 0.75rem;
+  font-size: var(--glm-text-2xs);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+/* Honeypot: hidden from people, reachable by bots.
+   Deliberately NOT display:none — some bots skip those. */
+/* !important is deliberate here: this must stay hidden no matter what
+   any plugin or future rule does. A visible honeypot is a broken form. */
+.glm-form__hp {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+/* On light backgrounds (tort detail pages sit on a dark panel already,
+   but the Contact page section is dark too — this covers page context). */
+.glm-tort-single__form .glm-form label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@media (max-width: 900px) {
+  .glm-form__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ── Page title (R11 — every page needs exactly one h1) ──── */
+
+.glm-page-title {
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  /* No horizontal padding: the box is already capped at the container
+     width, so padding here inset the text a further --glm-section-x
+     and left it out of line with the section templates below it,
+     whose padding sits OUTSIDE their 1200px inner. */
+  padding: var(--glm-section-y) 0;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h2);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-primary);
+}
+
+
+/* ── GLM navigation ──────────────────────────────────────── */
+/* Replacement for HFE's nav widget. Plain .glm-* selectors — no
+   prefix needed, because nothing else styles these classes.
+   Breakpoint is declared as a custom property so nav.js can read
+   it, rather than hardcoding a value that drifts from the CSS. */
+
+.glm-nav {
+  --glm-nav-breakpoint: 900;
+  position: relative;
+  display: flex;
+  align-items: center;
+justify-content: flex-end;
+}
+
+.glm-nav__list {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.glm-nav__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.glm-nav__link {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--glm-font-body);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  letter-spacing: 0.2px;
+  color: var(--glm-white);
+  text-decoration: none;
+  border-radius: var(--glm-radius);
+  transition: color 0.2s, background 0.2s;
+}
+
+.glm-nav__link:hover,
+.glm-nav__link:focus-visible {
+  color: var(--glm-cta);
+}
+
+/* The reference shows the active item in the CTA green. */
+.glm-nav__item.is-current > .glm-nav__link {
+  color: var(--glm-cta);
+}
+
+/* ── Submenu toggle (a real button, sibling to the link) ── */
+
+.glm-nav__toggle-sub {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.75rem;
+  margin-left: -0.5rem;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--glm-white);
+  cursor: pointer;
+}
+
+.glm-nav__toggle-sub:hover,
+.glm-nav__toggle-sub:focus-visible,
+.glm-nav__item--has-children:hover .glm-nav__toggle-sub {
+  color: var(--glm-cta);
+}
+
+/* Thin chevron rather than a filled triangle, matching the reference.
+   Two borders on a rotated square: lighter than an SVG per item. */
+.glm-nav__caret {
+  width: 0.4375rem;
+  height: 0.4375rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-0.125rem) rotate(45deg);
+  transition: transform 0.2s;
+}
+
+.glm-nav__toggle-sub[aria-expanded="true"] .glm-nav__caret {
+  transform: translateY(0.0625rem) rotate(225deg);
+}
+
+/* ── Submenu ─────────────────────────────────────────────── */
+
+.glm-nav__submenu {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem 0;
+  min-width: max-content;
+  background: var(--glm-white);
+  border-top: 3px solid var(--glm-accent);
+  box-shadow: 0 12px 40px rgba(11, 25, 41, 0.18);
+  border-radius: 0 0 4px 4px;
+}
+
+.glm-nav__link--child {
+  color: var(--glm-text-muted);
+  font-weight: 400;
+  padding: 0.5rem 1.25rem;
+  border-radius: 0;
+}
+
+.glm-nav__link--child:hover,
+.glm-nav__link--child:focus-visible {
+  color: var(--glm-primary);
+  background: var(--glm-accent-pale);
+}
+
+/* ── Hamburger ───────────────────────────────────────────── */
+
+.glm-nav__toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.glm-nav__burger {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.glm-nav__burger span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: var(--glm-white);
+  border-radius: 2px;
+  transition: transform 0.3s, opacity 0.2s;
+}
+
+.glm-nav__toggle[aria-expanded="true"] .glm-nav__burger span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.glm-nav__toggle[aria-expanded="true"] .glm-nav__burger span:nth-child(2) {
+  opacity: 0;
+}
+
+.glm-nav__toggle[aria-expanded="true"] .glm-nav__burger span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* ── Desktop: submenu on hover or focus ──────────────────── */
+
+@media (min-width: 901px) {
+
+  .glm-nav__submenu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 200;
+    display: none;
+  }
+
+  .glm-nav__item--has-children:hover > .glm-nav__submenu,
+  .glm-nav__item--has-children:focus-within > .glm-nav__submenu,
+  .glm-nav__item--has-children.is-open > .glm-nav__submenu {
+    display: block;
+  }
+}
+
+/* ── Mobile: hamburger panel ─────────────────────────────── */
+
+@media (max-width: 900px) {
+
+  .glm-nav__toggle {
+    display: inline-flex;
+  }
+
+  .glm-nav__list {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    z-index: 200;
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 0.5rem 0;
+    background: var(--glm-primary);
+    border-top: 3px solid var(--glm-accent);
+    box-shadow: 0 12px 40px rgba(11, 25, 41, 0.35);
+  }
+
+  .glm-nav.is-open .glm-nav__list {
+    display: flex;
+  }
+
+  .glm-nav__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+
+  .glm-nav__link {
+    flex: 1;
+    padding: 0.875rem 1.25rem;
+    font-size: 1rem;
+    font-weight: 700;
+  }
+
+  .glm-nav__toggle-sub {
+    width: 44px;
+    height: 44px;
+    margin-right: 0.5rem;
+  }
+
+  .glm-nav__submenu {
+    display: none;
+    flex-basis: 100%;
+    min-width: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border-top: none;
+    box-shadow: none;
+    border-radius: 0;
+  }
+
+  .glm-nav__item.is-open > .glm-nav__submenu {
+    display: block;
+  }
+
+  .glm-nav__link--child {
+    padding: 0.6875rem 1.25rem 0.6875rem 2.25rem;
+    font-size: 0.875rem;
+    font-weight: 300;
+    color: var(--glm-white);
+  }
+
+  .glm-nav__link--child:hover,
+  .glm-nav__link--child:focus-visible {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--glm-white);
+  }
+}
+
+/* No-JS: show the menu rather than hiding it behind a dead button. */
+.glm-nav:not(.glm-nav--ready) .glm-nav__toggle {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .glm-nav:not(.glm-nav--ready) .glm-nav__list {
+    position: static;
+    display: flex;
+  }
+}
+
+
+/* ── Site header ─────────────────────────────────────────── */
+
+/* Component-scoped tokens: header proportions live here so they can be
+   tuned in one place rather than scattered through the rules below. */
+.glm-header {
+  /* Reference measures 102px total. box-sizing is border-box, so the
+     3px accent border is inside that number — set the height directly
+     rather than deriving it from padding, which drifts as the logo or
+     button sizes change. */
+  --glm-header-height: 102px;
+  --glm-header-logo-h: 46px;
+  --glm-header-gap: 2rem;
+
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  min-height: var(--glm-header-height);
+  padding: 0 var(--glm-section-x);
+  background: var(--glm-primary);
+  border-bottom: 3px solid var(--glm-accent);
+  box-shadow: 0 2px 20px rgba(11, 25, 41, 0.12);
+    justify-content: center;
+}
+
+/* Direction is set in the neutralisation layer — see "Container
+   direction". Adding flex-direction here would silently lose. */
+.glm-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--glm-header-gap);
+  width: 100%;
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0;
+}
+
+.glm-header__logo {
+  flex-shrink: 0;
+}
+
+.glm-header__logo img {
+  display: block;
+  width: auto;
+  max-height: var(--glm-header-logo-h);
+}
+
+/* Nav takes the space between logo and actions, sitting centre-left
+   as in the reference rather than pushed hard right. */
+.glm-header__nav {
+  flex: 1;
+  justify-content: flex-start;
+}
+
+.glm-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-shrink: 0;
+  padding: 0;
+  width: auto;
+}
+
+/* Pill CTA with the phone icon, per the reference. */
+html .glm-header__cta .elementor-button {
+  white-space: nowrap;
+  padding: 0.8125rem 1.625rem;
+  border-radius: var(--glm-radius-pill);
+  font-size: var(--glm-text-sm);
+  letter-spacing: 0.4px;
+  text-transform: none;
+}
+
+html .glm-header__cta .elementor-button .elementor-button-icon {
+  font-size: 0.9em;
+}
+
+
+/* ── Header search (native <details> disclosure) ─────────── */
+
+.glm-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.glm-search__disclosure {
+  position: relative;
+}
+
+.glm-search__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  font-size: 1.25rem;
+  color: var(--glm-white);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background 0.2s, color 0.2s;
+
+  /* Remove the native disclosure triangle. */
+  list-style: none;
+}
+
+.glm-search__toggle::-webkit-details-marker {
+  display: none;
+}
+
+.glm-search__toggle::marker {
+  content: '';
+}
+
+.glm-search__toggle:hover,
+.glm-search__disclosure[open] .glm-search__toggle {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.glm-search__toggle:focus-visible {
+  outline: 2px solid var(--glm-accent-light);
+  outline-offset: 2px;
+}
+
+.glm-search__form {
+  position: absolute;
+  top: calc(100% + 0.75rem);
+  right: 0;
+  z-index: 200;
+  display: flex;
+  align-items: stretch;
+  min-width: 280px;
+  padding: 0.5rem;
+  background: var(--glm-white);
+  border-top: 3px solid var(--glm-accent);
+  border-radius: 0 0 var(--glm-radius-md) var(--glm-radius-md);
+  box-shadow: 0 12px 40px rgba(11, 25, 41, 0.18);
+}
+
+.glm-search__field {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--glm-font-body);
+  font-size: var(--glm-text-sm);
+  color: var(--glm-ink);
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.glm-search__submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  font-size: 1rem;
+  color: var(--glm-white);
+  background: var(--glm-accent);
+  border: none;
+  border-radius: var(--glm-radius);
+  cursor: pointer;
+}
+
+.glm-search__submit:hover,
+.glm-search__submit:focus-visible {
+  background: var(--glm-accent);
+  filter: brightness(1.1);
+}
+
+
+@media (max-width: 900px) {
+
+  .glm-header {
+    --glm-header-height: 72px;
+    --glm-header-logo-h: 36px;
+    --glm-header-gap: 1rem;
+    padding: 0 var(--glm-section-x-sm);
+  }
+
+  /* Order at mobile: logo · search + CTA · hamburger.
+     The nav stops taking the free space so the hamburger sits at the
+     right edge rather than floating in the middle. */
+  .glm-header__nav {
+    flex: 0 0 auto;
+    order: 3;
+  }
+
+  .glm-header__actions {
+    order: 2;
+    gap: 0.5rem;
+    margin-left: auto;
+  }
+
+  /* The mobile panel must span the whole header, not just the width of
+     the hamburger. Dropping position:relative here lets it resolve
+     against .glm-header, which is sticky and therefore positioned. */
+  .glm-nav {
+    position: static;
+  }
+
+  html .glm-header__cta .elementor-button {
+    padding: 0.625rem 1.125rem;
+    font-size: var(--glm-text-xs);
+  }
+
+  .glm-search__form {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: min(280px, calc(100vw - 3rem));
+  }
+}
+
+
+/* ── Site footer ─────────────────────────────────────────── */
+
+.glm-footer {
+  padding: var(--glm-section-y) var(--glm-section-x);
+  background: var(--glm-primary);
+  border-top: 3px solid var(--glm-accent);
+  color: var(--glm-white);
+}
+
+.glm-footer__top {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 5rem;
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0 0 2.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Column headings: sentence case at display scale, per the reference.
+   The old uppercase + 2px tracking read as a small label; at footer
+   scale these are section headings and should look like it. */
+.glm-footer h4 {
+  margin: 0 0 2.25rem;
+  font-size: var(--glm-text-2xl);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--glm-white);
+}
+
+html .glm-footer__divisions ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+html .glm-footer__divisions li {
+  margin-bottom: 1.5rem;
+}
+
+html .glm-footer__divisions li:last-child {
+  margin-bottom: 0;
+}
+
+html .glm-footer__divisions a {
+  display: inline-block;
+  font-size: var(--glm-text-lg);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.35;
+  color: var(--glm-cta);
+  text-decoration: none;
+}
+
+html .glm-footer__divisions a:hover,
+html .glm-footer__divisions a:focus-visible {
+  text-decoration: underline;
+}
+
+/* Division description. Same muted white as the office addresses opposite
+   it, so the two footer columns read at the same level. */
+html .glm-footer__divisions li p {
+  margin: 0.5rem 0 0;
+  font-size: var(--glm-text-sm);
+  line-height: var(--glm-leading-body);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* Bottom bar: logo, legal links and socials share a row, copyright and
+   disclaimer sit beneath — matching the reference.
+
+   The three columns (auto 1fr auto) are the logo, the links and the
+   socials, so the links centre themselves in the leftover space no
+   matter how wide the logo or the icon row turn out to be.
+
+   .glm-footer__legal is one widget holding three elements that need
+   to land in different cells, so `display: contents` promotes its
+   children to grid items. Safe here: it is a plain div, so no
+   semantics are lost, and the markup is untouched. */
+
+.glm-footer__bottom {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2rem;
+  align-items: center;
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 2rem 0 0;
+}
+
+.glm-footer__legal {
+  display: contents;
+}
+
+.glm-footer__logo {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.glm-footer__logo img {
+  display: block;
+  width: auto;
+  max-width: 170px;
+  height: auto;
+}
+
+.glm-footer__links {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2.1875rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.glm-footer__socials {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
+/* Placement and appearance are set together below, so there is one
+   rule per element rather than two that can drift apart. */
+
+.glm-footer__links a {
+  font-size: 0.75rem;
+  color: var(--glm-white);
+  text-decoration: none;
+}
+
+.glm-footer__links a:hover,
+.glm-footer__links a:focus-visible {
+  text-decoration: underline;
+}
+
+.glm-footer__copy {
+  grid-column: 1;
+  grid-row: 2;
+  margin: 0;
+  font-size: var(--glm-text-xs);
+  color: rgba(255, 255, 255, 0.82);
+  white-space: nowrap;
+}
+
+.glm-footer__disclaimer {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  max-width: 78ch;
+  margin: 0;
+  font-size: var(--glm-text-xs);
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+@media (max-width: 900px) {
+
+  .glm-footer__top {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  /* Offices drop to a single column; two would be unreadable. */
+  .glm-footer__offices .glm-locations {
+    columns: 1;
+  }
+
+  /* Bottom bar stacks: logo, links, socials, copyright, disclaimer.
+     Explicit placement is cleared so the grid can flow naturally. */
+  .glm-footer__bottom {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  .glm-footer__logo,
+  .glm-footer__links,
+  .glm-footer__socials,
+  .glm-footer__copy,
+  .glm-footer__disclaimer {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+
+  /* Centring is only meaningful in the three-column desktop row. */
+  .glm-footer__links {
+    justify-content: flex-start;
+  }
+
+  .glm-footer__copy {
+    white-space: normal;
+  }
+}
+
+
+/* =============================================================
+   STATES PAGE
+   -------------------------------------------------------------
+   Page-scoped. Every value is a token; the button, eyebrow and
+   section title are the existing components, not copies.
+
+   The reference hero uses a photograph we do not have. Until one
+   is supplied this uses a brand gradient — dropping a photo in is
+   one background-image line on .glm-states-hero.
+   ============================================================= */
+
+/* Banner photo comes from brand/states-hero.* via `wp glm import-brand`,
+   which exposes it as --glm-states-hero-image. The gradient is layered
+   OVER it at partial opacity so the heading keeps its contrast on a busy
+   photograph, and it also stands alone as the fallback when no image has
+   been imported — so the hero is never broken by a missing file. */
+.glm-states-hero {
+  padding: calc(var(--glm-section-y) * 1.4) var(--glm-section-x) calc(var(--glm-section-y) * 3);
+  background-image:var(--glm-states-hero-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  text-align: center;
+}
+
+.glm-states-hero__inner {
+  max-width: 68ch;
+  margin: 0 auto;
+}
+
+.glm-breadcrumb {
+  display: flex;
+  justify-content: center;
+  gap: 0.625rem;
+  margin-bottom: 1.5rem;
+  font-size: var(--glm-text-xs);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.glm-breadcrumb a {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.glm-breadcrumb a:hover,
+.glm-breadcrumb a:focus-visible {
+  color: var(--glm-white);
+}
+
+.glm-breadcrumb [aria-current] {
+  color: var(--glm-white);
+}
+
+.glm-states-hero__title {
+  margin: 0 0 1.25rem;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h1);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-white);
+}
+
+.glm-states-hero__lead {
+  margin: 0;
+  font-size: var(--glm-text-base);
+  font-weight: 300;
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+
+/* ── Intro card, overlapping the hero ────────────────────── */
+
+.glm-states-intro {
+  padding: 0 var(--glm-section-x);
+}
+
+.glm-states-intro__card {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  max-width: var(--glm-container);
+  margin: calc(var(--glm-section-y) * -2) auto 0;
+  overflow: hidden;
+  border-radius: var(--glm-radius-md);
+  box-shadow: 0 24px 64px rgba(11, 25, 41, 0.22);
+}
+
+.glm-states-intro__main {
+  padding: var(--glm-card-pad);
+  background: var(--glm-surface);
+}
+
+.glm-states-intro__title {
+  margin: 0 0 1.75rem;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-3xl);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-primary);
+}
+
+.glm-states-intro__list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.glm-states-intro__list li {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 1.25rem;
+  align-items: center;
+  font-size: var(--glm-text-sm);
+  color: var(--glm-text-muted);
+}
+
+/* Outlined pill — same shape language as .glm-pill, brand-green. */
+.glm-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4375rem 0.5rem;
+  font-size: var(--glm-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--glm-tracking-wide);
+  color: var(--glm-cta);
+  background: var(--glm-white);
+  border: 1px solid var(--glm-cta);
+  border-radius: var(--glm-radius-md);
+}
+
+.glm-states-intro__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.75rem;
+  padding: var(--glm-card-pad);
+  background: var(--glm-cta);
+  text-align: center;
+}
+
+.glm-states-intro__aside-title {
+  margin: 0;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-3xl);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-white);
+}
+
+/* Solid dark button — the third .glm-btn variant, alongside
+   --cta and --outline. */
+.glm-btn--solid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.875rem 2rem;
+  font-family: var(--glm-font-body);
+  font-size: var(--glm-text-sm);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--glm-white);
+  background: var(--glm-primary);
+  border-radius: var(--glm-radius);
+  text-decoration: none;
+  transition: filter 0.2s, transform 0.15s;
+}
+
+.glm-btn--solid:hover,
+.glm-btn--solid:focus-visible {
+  color: var(--glm-white);
+  text-decoration: none;
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+
+/* ── State cards ─────────────────────────────────────────── */
+
+.glm-states-grid-wrap {
+  text-align: center;
+}
+
+.glm-states-grid__title {
+  margin-bottom: var(--glm-section-y);
+}
+
+.glm-states-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.glm-state-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--glm-radius-md);
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.glm-state-card:hover,
+.glm-state-card:focus-within {
+  box-shadow: 0 14px 34px rgba(11, 25, 41, 0.14);
+  transform: translateY(-3px);
+}
+
+.glm-state-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 6.25rem;
+  padding: 1.5rem;
+  background: var(--glm-accent);
+}
+
+.glm-state-card__head h3 {
+  margin: 0;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-2xl);
+  font-weight: 700;
+  color: var(--glm-white);
+}
+
+.glm-state-card__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.75rem;
+  padding: var(--glm-card-pad);
+  background: var(--glm-surface);
+}
+
+.glm-state-card__name {
+  margin: 0;
+  font-size: var(--glm-text-sm);
+  font-weight: 700;
+  color: var(--glm-primary);
+}
+
+.glm-state-card__desc {
+  margin: 0;
+  font-size: var(--glm-text-sm);
+  line-height: var(--glm-leading-loose);
+  color: var(--glm-text-muted);
+}
+
+.glm-state-card__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  font-size: var(--glm-text-sm);
+  font-weight: 600;
+  color: var(--glm-cta);
+  text-decoration: none;
+}
+
+.glm-state-card__more:hover,
+.glm-state-card__more:focus-visible {
+  color: var(--glm-cta);
+  text-decoration: underline;
+}
+
+
+/* ── CTA band ────────────────────────────────────────────── */
+
+.glm-states-cta {
+  padding: var(--glm-section-y) var(--glm-section-x);
+  background: linear-gradient(120deg, var(--glm-primary) 0%, var(--glm-accent) 180%);
+}
+
+.glm-states-cta__inner {
+  display: grid;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 4rem;
+  align-items: start;
+  max-width: var(--glm-container);
+  margin: 0 auto;
+}
+
+.glm-states-cta__title {
+  margin: 0 0 1rem;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h2);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-white);
+}
+
+.glm-states-cta__copy > p {
+  margin: 0 0 2rem;
+  font-size: var(--glm-text-sm);
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.glm-states-cta__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+  margin: 0;
+}
+
+.glm-states-cta__facts dt {
+  font-size: var(--glm-text-sm);
+  font-weight: 700;
+  color: var(--glm-white);
+}
+
+.glm-states-cta__facts dd {
+  margin: 0.25rem 0 0;
+  font-size: var(--glm-text-sm);
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.glm-states-cta__facts a {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.glm-states-cta__facts a:hover,
+.glm-states-cta__facts a:focus-visible {
+  color: var(--glm-white);
+}
+
+
+@media (max-width: 900px) {
+
+  .glm-states-hero {
+    padding: var(--glm-section-y) var(--glm-section-x) calc(var(--glm-section-y) * 2.5);
+  }
+
+  .glm-states-intro__card {
+    grid-template-columns: 1fr;
+    margin-top: calc(var(--glm-section-y) * -1.5);
+  }
+
+  .glm-states-intro__list li {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .glm-badge {
+    justify-self: start;
+  }
+
+  .glm-states-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .glm-states-cta__inner {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+  }
+}
+
+
+/* ── Shared section furniture ────────────────────────────── */
+
+.glm-section-title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-h2);
+  font-weight: 700;
+  line-height: var(--glm-leading-tight);
+  color: var(--glm-primary);
+  margin: 0 0 1rem;
+}
+
+.glm-section-title em {
+  font-style: italic;
+  color: var(--glm-accent);
+}
+
+
+/* ── Stats bar ───────────────────────────────────────────── */
+
+.glm-stats {
+  padding: 0 var(--glm-section-x) 3.125rem;
+  background: var(--glm-primary);
+}
+
+.glm-stats__inner {
+  display: flex;
+      flex-direction: row !important;
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.27);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+
+.glm-stat {
+  flex: 1;
+  min-width: 160px;
+  padding: 1.375rem 2.5rem;
+  text-align: center;
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.glm-stat:last-child {
+  border-right: none;
+}
+
+html .glm-stat__num,
+html .glm-stat__num p {
+  margin: 0;
+  font-family: var(--glm-font-display);
+  font-size: 2.125rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--glm-white);
+}
+
+.glm-stat__lbl {
+  margin-top: 5px;
+  font-size: var(--glm-text-2xs);
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #b9b9b9;
+}
+
+
+/* ── About ───────────────────────────────────────────────── */
+
+.glm-about {
+  padding: var(--glm-section-y) var(--glm-section-x);
+  background: var(--glm-white);
+}
+
+.glm-about__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5rem;
+  align-items: start;
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0;
+}
+
+html .glm-about__copy p {
+  margin-top: 1rem;
+  font-size: var(--glm-text-base);
+  font-weight: 300;
+  line-height: 1.85;
+  color: var(--glm-text-muted);
+}
+
+.glm-about__highlights {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin-top: 2.25rem;
+  padding: 0;
+  background: var(--glm-accent);
+  border: 2px solid var(--glm-accent);
+}
+
+.glm-highlight {
+  padding: 1.75rem 1.5rem;
+  background: var(--glm-accent-pale);
+}
+
+.glm-highlight__icon {
+  font-size: 1.375rem;
+  margin-bottom: 0.625rem;
+}
+
+html .glm-highlight__label,
+html .glm-highlight__label p {
+  margin: 0 0 4px;
+  font-size: var(--glm-text-sm);
+  font-weight: 600;
+  color: var(--glm-primary);
+}
+
+.glm-highlight__sub {
+  font-size: 0.75rem;
+  color: var(--glm-text-muted);
+}
+
+html .glm-about__disclaimer p {
+  margin-top: 1.25rem;
+  font-size: var(--glm-text-xs);
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--glm-text-muted);
+}
+
+
+/* ── Results list (from the result CPT) ──────────────────── */
+
+.glm-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.glm-result {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  padding: 1.5rem 0;
+  border-bottom: 1px solid var(--glm-accent);
+}
+
+.glm-result:first-child {
+  border-top: 1px solid var(--glm-accent);
+}
+
+.glm-result__amount {
+  flex-shrink: 0;
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-4xl);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--glm-accent);
+  white-space: nowrap;
+}
+
+.glm-result__case {
+  font-size: var(--glm-text-sm);
+  font-weight: 600;
+  color: var(--glm-primary);
+}
+
+.glm-result__desc {
+  margin-top: 3px;
+  font-size: 0.75rem;
+  color: var(--glm-text-muted);
+}
+
+
+/* ── Divisions ───────────────────────────────────────────── */
+
+.glm-divisions {
+  padding: var(--glm-section-y) var(--glm-section-x);
+  background: var(--glm-primary);
+}
+
+.glm-divisions__inner {
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0;
+}
+
+.glm-divisions .glm-section-title {
+  color: var(--glm-white);
+}
+
+.glm-divisions .glm-section-title em {
+  color: var(--glm-accent-light);
+}
+
+.glm-div-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3px;
+  margin-top: 3.25rem;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.glm-div-card {
+  position: relative;
+  padding: 3rem 2.25rem;
+  background: rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+}
+
+.glm-div-card::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: var(--glm-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s;
+}
+
+.glm-div-card:hover::after {
+  transform: scaleX(1);
+}
+
+.glm-div-card__num {
+  font-family: var(--glm-font-display);
+  font-size: 3.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--glm-accent);
+  margin-bottom: 1rem;
+}
+
+.glm-div-card__icon {
+  font-size: 2rem;
+  margin-bottom: 1.25rem;
+}
+
+.glm-div-card__title {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-3xl);
+  font-weight: 700;
+  color: var(--glm-white);
+  margin: 0 0 0.75rem;
+}
+
+html .glm-div-card__desc p {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 300;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+html .glm-div-card__link .elementor-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1.5rem;
+  padding: 0;
+  background: transparent;
+  color: var(--glm-cta);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+html .glm-div-card__link .elementor-button::after {
+  content: '→';
+  transition: transform 0.2s;
+}
+
+html .glm-div-card__link .elementor-button:hover::after {
+  transform: translateX(5px);
+}
+
+
+/* ── Contact ─────────────────────────────────────────────── */
+
+.glm-contact {
+  padding: var(--glm-section-y) var(--glm-section-x);
+  background: var(--glm-surface-deep);
+}
+
+.glm-contact__inner {
+  max-width: var(--glm-container);
+  margin: 0 auto;
+  padding: 0;
+}
+
+.glm-contact .glm-section-title {
+  color: var(--glm-white);
+}
+
+.glm-contact .glm-section-title em {
+  color: var(--glm-accent-light);
+}
+
+.glm-contact__sub {
+  margin: 2rem 0 0.5rem;
+  font-family: var(--glm-font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--glm-white);
+}
+
+html .glm-contact__lead p {
+  max-width: 60ch;
+  margin: 0 0 1.75rem;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+
+/* ── Office locations (from the location CPT) ────────────── */
+
+.glm-locations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2.5rem;
+}
+
+.glm-loc-state {
+  flex: 1;
+  min-width: 220px;
+}
+
+.glm-loc-state__name {
+  padding-bottom: 15px;
+  font-size: var(--glm-text-2xs);
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--glm-cta);
+}
+
+.glm-loc-state__offices {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Base office styling is INK-ON-LIGHT.
+   -----------------------------------------------------------
+   These rules previously used white text because the block only
+   existed in the dark footer — which made every office on the
+   Locations page invisible against the light page background.
+   The light treatment is now the default and the footer inverts
+   it below, which is the correct way round: the page is the
+   canonical use, the footer is the exception. */
+
+.glm-office__city {
+  font-size: var(--glm-text-sm);
+  font-weight: 800;
+  color: var(--glm-primary);
+}
+
+.glm-office__address {
+  font-size: var(--glm-text-xs);
+  line-height: 1.6;
+  color: var(--glm-text-muted);
+}
+
+.glm-office__phone {
+  display: block;
+  font-size: var(--glm-text-xs);
+  color: var(--glm-accent);
+  text-decoration: none;
+}
+
+.glm-office__phone:hover,
+.glm-office__phone:focus-visible {
+  text-decoration: underline;
+}
+
+
+/* ── Footer treatment (contextual, no parameter needed) ───
+   The footer sits on --glm-primary, so the light defaults above
+   are inverted here. (0,2,0) beats the (0,1,0) base. */
+
+.glm-footer__offices .glm-office__city {
+  font-size: var(--glm-text-base);
+  font-weight: 700;
+  color: var(--glm-white);
+}
+
+.glm-footer__offices .glm-office__address {
+  font-size: var(--glm-text-sm);
+  line-height: var(--glm-leading-loose);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.glm-footer__offices .glm-office__phone {
+  font-size: var(--glm-text-sm);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+/* Two phone numbers sit side by side rather than stacked, as in the
+   reference. inline-block keeps them on one line and lets them wrap
+   together on narrow screens. */
+.glm-footer__offices .glm-office__phone {
+  display: inline-block;
+  margin-right: 1.25rem;
+}
+
+/* Multi-column, not a grid.
+   -----------------------------------------------------------
+   A 2-col grid would flow the four states as FL,MA / NJ,MI. CSS
+   columns BALANCE BY HEIGHT instead, which puts Florida's four
+   offices in column one and Massachusetts, New Jersey and Michigan
+   in column two — the arrangement in the reference, and it stays
+   correct if an office is added or removed. */
+.glm-footer__offices .glm-locations {
+  display: block;
+  columns: 2;
+  column-gap: 3rem;
+}
+
+.glm-footer__offices .glm-loc-state {
+  min-width: 0;
+  margin-bottom: 2rem;
+  break-inside: avoid;
+}
+
+.glm-footer__offices .glm-loc-state__name {
+  padding-bottom: 1rem;
+  font-size: var(--glm-text-base);
+  letter-spacing: var(--glm-tracking-wide);
+}
+
+.glm-footer__offices .glm-loc-state__offices {
+  gap: 1.5rem;
+}
+
+
+/* ── Locations page: card layout ──────────────────────────
+   Scoped to the --cards modifier, so the footer list is
+   untouched. Card surface, radius, border and hover mirror
+   .glm-tort-card so the two read as one family — no new
+   visual language introduced. */
+
+.glm-locations__lead {
+  max-width: 60ch;
+  margin: 0 0 var(--glm-section-y);
+  font-size: var(--glm-text-lg);
+  font-weight: 300;
+  line-height: var(--glm-leading-loose);
+  color: var(--glm-text-muted);
+}
+
+.glm-locations--cards {
+  display: block;
+}
+
+.glm-locations--cards .glm-loc-state {
+  min-width: 0;
+  margin-bottom: var(--glm-section-y);
+}
+
+.glm-locations--cards .glm-loc-state:last-child {
+  margin-bottom: 0;
+}
+
+/* State becomes a real group heading rather than a column label. */
+.glm-locations--cards .glm-loc-state__name {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  padding: 0 0 1.25rem;
+  font-family: var(--glm-font-body);
+  font-size: var(--glm-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--glm-tracking-wide);
+  text-transform: uppercase;
+  color: var(--glm-accent);
+}
+
+/* Rule trailing the state name — the same device .glm-eyebrow uses. */
+.glm-locations--cards .glm-loc-state__name::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--glm-accent-pale);
+}
+
+.glm-locations--cards .glm-loc-state__offices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--glm-card-min), 1fr));
+  gap: 1.25rem;
+}
+
+.glm-locations--cards .glm-office {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: var(--glm-card-pad);
+  background: var(--glm-white);
+  border: 1px solid var(--glm-accent-pale);
+  border-radius: var(--glm-radius-md);
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+}
+
+.glm-locations--cards .glm-office:hover,
+.glm-locations--cards .glm-office:focus-within {
+  border-color: var(--glm-accent);
+  box-shadow: 0 10px 30px rgba(11, 25, 41, 0.1);
+  transform: translateY(-2px);
+}
+
+.glm-locations--cards .glm-office__city {
+  font-family: var(--glm-font-display);
+  font-size: var(--glm-text-xl);
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--glm-primary);
+  margin: 0;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--glm-accent-pale);
+  width: 100%;
+}
+
+/* Icon rows: the icon holds its own column so wrapped lines
+   stay aligned with the text, not under the glyph. */
+.glm-locations--cards .glm-office__address,
+.glm-locations--cards .glm-office__phone {
+  display: grid;
+  grid-template-columns: 1.125rem 1fr;
+  gap: 0.625rem;
+  align-items: start;
+  font-size: var(--glm-text-sm);
+  line-height: var(--glm-leading-loose);
+}
+
+.glm-locations--cards .glm-office__address {
+  color: var(--glm-text-muted);
+}
+
+.glm-locations--cards .glm-icon {
+  margin-top: 0.25rem;
+  font-size: 1.125rem;
+  color: var(--glm-accent);
+}
+
+.glm-locations--cards .glm-office__directions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  font-size: var(--glm-text-2xs);
+  font-weight: 700;
+  letter-spacing: var(--glm-tracking-wide);
+  text-transform: uppercase;
+  color: var(--glm-cta);
+  text-decoration: none;
+}
+
+.glm-locations--cards .glm-office__directions .glm-icon {
+  margin-top: 0;
+  font-size: 0.875rem;
+  color: currentColor;
+  transition: transform 0.2s;
+}
+
+.glm-locations--cards .glm-office__directions:hover,
+.glm-locations--cards .glm-office__directions:focus-visible {
+  color: var(--glm-cta);
+  text-decoration: underline;
+}
+
+.glm-locations--cards .glm-office__directions:hover .glm-icon {
+  transform: translateX(3px);
+}
+
+@media (max-width: 900px) {
+  .glm-locations--cards .glm-loc-state__offices {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ── Responsive (R8 — single 900px break, no duplicates) ─── */
+
+@media (max-width: 900px) {
+
+  /* Direction handled in the neutralisation layer. */
+
+  .glm-stat {
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .glm-stat:last-child {
+    border-bottom: none;
+  }
+
+  .glm-about__grid,
+  .glm-div-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .glm-about__grid {
+    gap: 3rem;
+  }
+
+  .glm-div-card {
+    padding: 2.25rem 1.75rem;
+  }
+}
+
+
+/* ── Social links ────────────────────────────────────────── */
+
+.glm-socials {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.glm-socials__item {
+  margin: 0;
+}
+
+.glm-socials__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  font-size: 1.0625rem;
+  line-height: 1;
+  color: var(--glm-white);
+  text-decoration: none;
+  border-radius: 50%;
+  transition: color 0.2s, background 0.2s;
+}
+
+.glm-socials__link:hover,
+.glm-socials__link:focus-visible {
+  color: var(--glm-accent-light);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.glm-socials__link svg {
+  display: block;
+}
+
+/* Screen-reader-only text. Hello Elementor does not always define this,
+   so it is declared here rather than assumed. */
+.glm-socials .screen-reader-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+
+/* ── Accessibility ───────────────────────────────────────── */
+
+.glm-tort-card:focus-visible,
+.glm-tort-tab:focus-visible {
+  outline: 2px solid var(--glm-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glm-tort-card,
+  .glm-tort-card::after,
+  .glm-tort-tab {
+    transition: none;
+  }
+}
