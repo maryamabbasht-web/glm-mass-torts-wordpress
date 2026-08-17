@@ -6,6 +6,21 @@ A working log of what changed in this project and why.
 
 ---
 
+## 2026-08-17 — Remove Home from primary navigation
+
+**Type:** `fix`
+
+### What changed
+
+- Removed the `Home` item from the generated Primary menu.
+- The homepage/front-page configuration remains unchanged.
+- The Primary menu now starts with `Mass Torts`.
+
+### Why
+
+The homepage remains the site's front page, but it does not need a redundant `Home` link in the primary navigation. Removing the navigation entry keeps the menu focused on the site's substantive destinations without changing homepage behaviour.
+
+
 ## 2026-08-06 — `wp glm install`: one command from bare WordPress to a working site
 
 **Type:** `feat` · **Branch:** `feat/install-command`
